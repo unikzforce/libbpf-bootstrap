@@ -13,7 +13,7 @@
 
 #include "router.h"
 
-char _license[] SEC("license") = "GPL";
+char LICENSE[] SEC("license") = "Dual BSD/GPL";
 
 // helper: decr ttl by 1 for IP and IPv6
 static inline void _decr_ttl(__u16 proto, void *h) {
@@ -27,7 +27,7 @@ static inline void _decr_ttl(__u16 proto, void *h) {
 }
 
 // main router logic
-SEC("prog") int xdp_router(struct xdp_md *ctx) {
+SEC("xdp") int xdp_router(struct xdp_md *ctx) {
     void *data_end = (void *)(long)ctx->data_end;
     void *data = (void *)(long)ctx->data;
     struct ethhdr *eth = data;
