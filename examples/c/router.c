@@ -6,13 +6,6 @@
 #include <signal.h>
 #include <unistd.h>
 
-bool should_wait = true;
-
-void handle_sigint(int sig)
-{
-    should_wait = true;
-}
-
 static int libbpf_print_fn(enum libbpf_print_level level, const char *format, va_list args)
 {
     return vfprintf(stderr, format, args);
@@ -69,6 +62,8 @@ int main(int argc, char **argv)
     struct router_bpf *skel;
     struct bpf_link *link;
     int err;
+    sigset_t set;
+    int sig;
 
     libbpf_set_print(libbpf_print_fn);
 
@@ -101,20 +96,23 @@ int main(int argc, char **argv)
     // attach the BPF programs
     link = bpf_program__attach_xdp(skel->progs.xdp_router, iface_index);
     // replace libbpf_get_error with new method
-    if (!link) {
+    if (link == NULL) {
         fprintf(stderr, "Failed to attach BPF program");
         goto cleanup;
     }
 
-    // wait for SIGINT
-    signal(SIGINT, handle_sigint);
-    while (should_wait) {
-        sleep(1);
-    }
+    sigemptyset(&set);
+    sigaddset(&set, SIGINT);
+
+    sigwait(&set, &sig);
+
 
 cleanup:
     // detach the BPF program from the interface
 //    bpf_set_link_xdp_fd(skel->links.iface, -1, 0);
+    if(link != NULL) {
+        bpf_link__destroy(link);
+    }
 
     // cleanup the skeleton
     router_bpf__destroy(skel);
