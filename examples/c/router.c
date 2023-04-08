@@ -95,7 +95,6 @@ int main(int argc, char **argv)
 
     // attach the BPF programs
     link = bpf_program__attach_xdp(skel->progs.xdp_router, iface_index);
-    // replace libbpf_get_error with new method
     if (link == NULL) {
         fprintf(stderr, "Failed to attach BPF program");
         goto cleanup;
@@ -119,11 +118,5 @@ cleanup:
 
     return -err;
 }
-
-//The router.c file is a bit more involved than the other examples. It contains a main function that opens the skeleton, loads and attaches it, and then waits for a SIGINT signal to exit. It also attaches the BPF program to a network interface programmatically with libbpf.
-//
-//The main function starts by increasing the rlimit memlock. This is required to increase the maximum amount of memory that can be locked into memory. This is needed because the BPF program will be loaded into memory.
-//
-//Next, the main function opens the skeleton. The skeleton is a structure that contains all the BPF programs and maps.
 
 
