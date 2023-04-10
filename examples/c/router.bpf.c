@@ -13,6 +13,8 @@
 
 #include "router.h"
 
+int dest_iface_index = 0;
+
 char LICENSE[] SEC("license") = "Dual BSD/GPL";
 
 // helper: decr ttl by 1 for IP and IPv6

@@ -69,12 +69,10 @@ int main(int argc, char **argv)
 
     print_ifaces();
 
-    if (argc != 2) {
-        fprintf(stderr, "Usage: %s <DEV>", argv[0]);
+    if (argc != 3) {
+        fprintf(stderr, "Usage: %s <SOURCE-DEV> <DEST-DEV>", argv[0]);
         return 1;
     }
-
-    int iface_index = if_nametoindex(argv[1]);
 
     // increase rlimit memlock
     bump_memloc_rlimit();
@@ -85,6 +83,9 @@ int main(int argc, char **argv)
         fprintf(stderr, "Failed to open skeleton");
         return 1;
     }
+
+    int iface_index = if_nametoindex(argv[1]);
+    skel->bss->dest_iface_index = if_nametoindex(argv[2]);
 
     // load and verify the BPF programs
     err = router_bpf__load(skel);
