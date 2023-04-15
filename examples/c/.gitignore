@@ -9,6 +9,6 @@
 /usdt
 /sockfilter
 /tc
+/ksyscall
 /cmake-build-debug/
 /cmake-build-release/
-
