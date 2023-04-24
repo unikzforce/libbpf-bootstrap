@@ -1,0 +1,17 @@
+# source/switch/destination
+name: switch
+
+topology:
+  nodes:
+    source:
+      kind: linux
+      image: my_ubuntu:latest
+    switch:
+      kind: linux
+      image: my_ubuntu:latest
+    destination:
+      kind: linux
+      image: my_ubuntu:latest
+  links:
+    - endpoints: ["source:eth1","switch:eth1"]
+    - endpoints: ["switch:eth2","destination:eth1"]
