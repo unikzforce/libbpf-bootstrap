@@ -9,6 +9,8 @@ topology:
     switch:
       kind: linux
       image: my_ubuntu:latest
+      binds:
+        - ../build/minimal:/opt/minimal
     destination:
       kind: linux
       image: my_ubuntu:latest
