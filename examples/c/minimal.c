@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: (LGPL-2.1 OR BSD-2-Clause)
 /* Copyright (c) 2020 Facebook */
 #include <stdio.h>
-#include <sys/types.h>
 #include <sys/stat.h>
 #include <unistd.h>
 #include <bpf/libbpf.h>
@@ -16,7 +15,7 @@ int main(int argc, char **argv)
 {
 	struct minimal_bpf *skel;
 	int err;
-    struct stat sb;
+	struct stat sb;
 
 	/* Set up libbpf errors and debug info callback */
 	libbpf_set_print(libbpf_print_fn);
@@ -29,12 +28,12 @@ int main(int argc, char **argv)
 	}
 
 	/* ensure BPF program only handles write() syscalls from our process */
-    if (stat("/proc/self/ns/pid", &sb) == -1) {
-        fprintf(stderr, "Failed to acquire namespace information");
-        return 1;
-    }
-    skel->bss->dev = sb.st_dev;
-    skel->bss->ino = sb.st_ino;
+	if (stat("/proc/self/ns/pid", &sb) == -1) {
+		fprintf(stderr, "Failed to acquire namespace information");
+		return 1;
+	}
+	skel->bss->dev = sb.st_dev;
+	skel->bss->ino = sb.st_ino;
 	skel->bss->my_pid = getpid();
 
 	/* Load & verify BPF programs */
