@@ -8,50 +8,50 @@
 
 static int libbpf_print_fn(enum libbpf_print_level level, const char *format, va_list args)
 {
-    return vfprintf(stderr, format, args);
+	return vfprintf(stderr, format, args);
 }
 
 static void bump_memloc_rlimit(void)
 {
-    struct rlimit rlimit_new = {
-            .rlim_cur = RLIM_INFINITY,
-            .rlim_max = RLIM_INFINITY,
-    };
+	struct rlimit rlimit_new = {
+		.rlim_cur = RLIM_INFINITY,
+		.rlim_max = RLIM_INFINITY,
+	};
 
-    if (setrlimit(RLIMIT_MEMLOCK, &rlimit_new)) {
-        fprintf(stderr, "Failed to increase RLIMIT_MEMLOC limit\n");
-        exit(1);
-    }
+	if (setrlimit(RLIMIT_MEMLOCK, &rlimit_new)) {
+		fprintf(stderr, "Failed to increase RLIMIT_MEMLOC limit\n");
+		exit(1);
+	}
 }
 
 void print_ifaces(void)
 {
-    // get a list of network interfaces
-    struct ifaddrs *ifaddr, *ifa;
+	// get a list of network interfaces
+	struct ifaddrs *ifaddr, *ifa;
 
-    if (getifaddrs(&ifaddr) == -1) {
-        perror("getifaddrs");
-        exit(EXIT_FAILURE);
-    }
+	if (getifaddrs(&ifaddr) == -1) {
+		perror("getifaddrs");
+		exit(EXIT_FAILURE);
+	}
 
-    // iterate over the list of network interfaces
-    // print the interface name and index
-    for (ifa = ifaddr; ifa != NULL; ifa = ifa->ifa_next) {
-        if (ifa->ifa_addr == NULL) {
-            continue;
-        }
+	// iterate over the list of network interfaces
+	// print the interface name and index
+	for (ifa = ifaddr; ifa != NULL; ifa = ifa->ifa_next) {
+		if (ifa->ifa_addr == NULL) {
+			continue;
+		}
 
-        int family = ifa->ifa_addr->sa_family;
+		int family = ifa->ifa_addr->sa_family;
 
-        printf("%s\t%d\n", ifa->ifa_name, if_nametoindex(ifa->ifa_name));
+		printf("%s\t%d\n", ifa->ifa_name, if_nametoindex(ifa->ifa_name));
 
-//        if (family == AF_INET || family == AF_INET6) {
-//            printf("%s\t%d", ifa->ifa_name, if_nametoindex(ifa->ifa_name));
-//        }
-    }
+		//        if (family == AF_INET || family == AF_INET6) {
+		//            printf("%s\t%d", ifa->ifa_name, if_nametoindex(ifa->ifa_name));
+		//        }
+	}
 
-    freeifaddrs(ifaddr);
-    fflush(stdout);
+	freeifaddrs(ifaddr);
+	fflush(stdout);
 }
 
 // create a main function that opens the skeleton, loads and attaches it, and then waits for a SIGINT signal to exit.
@@ -59,65 +59,63 @@ void print_ifaces(void)
 int main(int argc, char **argv)
 {
 
-    struct router_bpf *skel;
-    struct bpf_link *link;
-    int err;
-    sigset_t set;
-    int sig;
+	struct router_bpf *skel;
+	struct bpf_link *link;
+	int err;
+	sigset_t set;
+	int sig;
 
-    libbpf_set_print(libbpf_print_fn);
+	libbpf_set_print(libbpf_print_fn);
 
-    print_ifaces();
+	print_ifaces();
 
-    if (argc != 3) {
-        fprintf(stderr, "Usage: %s <SOURCE-DEV> <DEST-DEV>", argv[0]);
-        return 1;
-    }
+	if (argc != 3) {
+		fprintf(stderr, "Usage: %s <SOURCE-DEV> <DEST-DEV>", argv[0]);
+		return 1;
+	}
 
-    // increase rlimit memlock
-    bump_memloc_rlimit();
+	// increase rlimit memlock
+	bump_memloc_rlimit();
 
-    // open the skeleton
-    skel = router_bpf__open();
-    if (!skel) {
-        fprintf(stderr, "Failed to open skeleton");
-        return 1;
-    }
+	// open the skeleton
+	skel = router_bpf__open();
+	if (!skel) {
+		fprintf(stderr, "Failed to open skeleton");
+		return 1;
+	}
 
-    int iface_index = if_nametoindex(argv[1]);
-    skel->bss->dest_iface_index = if_nametoindex(argv[2]);
+	int iface_index = if_nametoindex(argv[1]);
+	skel->bss->dest_iface_index = if_nametoindex(argv[2]);
 
-    // load and verify the BPF programs
-    err = router_bpf__load(skel);
-    if (err) {
-        fprintf(stderr, "Failed to load and verify BPF skeleton");
-        goto cleanup;
-    }
+	// load and verify the BPF programs
+	err = router_bpf__load(skel);
+	if (err) {
+		fprintf(stderr, "Failed to load and verify BPF skeleton");
+		goto cleanup;
+	}
 
-    // attach the BPF programs
-    link = bpf_program__attach_xdp(skel->progs.xdp_router, iface_index);
-    if (link == NULL) {
-        fprintf(stderr, "Failed to attach BPF program");
-        goto cleanup;
-    }
+	// attach the BPF programs
+	link = bpf_program__attach_xdp(skel->progs.xdp_router, iface_index);
+	if (link == NULL) {
+		fprintf(stderr, "Failed to attach BPF program");
+		goto cleanup;
+	}
 
-    sigemptyset(&set);
-    sigaddset(&set, SIGINT);
+	sigemptyset(&set);
+	sigaddset(&set, SIGINT);
 
-    sigwait(&set, &sig);
+	sigwait(&set, &sig);
 
 
 cleanup:
-    // detach the BPF program from the interface
-//    bpf_set_link_xdp_fd(skel->links.iface, -1, 0);
-    if(link != NULL) {
-        bpf_link__destroy(link);
-    }
+	// detach the BPF program from the interface
+	//    bpf_set_link_xdp_fd(skel->links.iface, -1, 0);
+	if (link != NULL) {
+		bpf_link__destroy(link);
+	}
 
-    // cleanup the skeleton
-    router_bpf__destroy(skel);
+	// cleanup the skeleton
+	router_bpf__destroy(skel);
 
-    return -err;
+	return -err;
 }
-
-
