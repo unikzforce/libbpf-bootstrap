@@ -11,6 +11,7 @@ topology:
       image: my_ubuntu:latest
       binds:
         - ../build/minimal:/opt/minimal
+        - ../build/router:/opt/router
     destination:
       kind: linux
       image: my_ubuntu:latest
