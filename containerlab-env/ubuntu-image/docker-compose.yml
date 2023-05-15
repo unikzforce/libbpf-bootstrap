@@ -1,7 +1,0 @@
-version: "3"
-services:
-  ubuntu:
-    build:
-      context: .
-      dockerfile: ./Dockerfile
-    image: my_ubuntu:latest

@@ -1,0 +1,44 @@
+Vagrant.configure("2") do |config|
+
+    config.vm.provider "libvirt"
+
+    config.vm.define "source" do |source|
+      source.vm.box = "generic/debian11"
+
+      source.vm.provision "shell", inline:<<-'SHELL'
+        sudo apt update
+        echo "wireshark-common wireshark-common/install-setuid boolean true" | sudo debconf-set-selections
+        sudo DEBIAN_FRONTEND=noninteractive apt install -y tshark tcpdump
+      SHELL
+
+      source.vm.network "private_network", ip: "192.168.2.3", netmask:"255.255.255.0"
+    end
+
+    config.vm.define "switch" do |switch|
+      switch.vm.box = "generic/debian11"
+
+      switch.vm.synced_folder "../../build", "/vagrant"
+      # switch.bindfs.bind_folder "/whatever", "/vagrant"
+
+      switch.vm.provision "shell", inline:<<-'SHELL'
+        sudo apt update
+        echo "wireshark-common wireshark-common/install-setuid boolean true" | sudo debconf-set-selections
+        sudo DEBIAN_FRONTEND=noninteractive apt install -y tshark tcpdump
+      SHELL
+
+      switch.vm.network "private_network", ip: "192.168.2.4", netmask:"255.255.255.0"
+      switch.vm.network "private_network", ip: "192.168.3.4", netmask:"255.255.255.0"
+    end
+
+    config.vm.define "destination" do |destination|
+      destination.vm.box = "generic/debian11"
+
+      destination.vm.provision "shell", inline:<<-'SHELL'
+        sudo apt update
+        echo "wireshark-common wireshark-common/install-setuid boolean true" | sudo debconf-set-selections
+        sudo DEBIAN_FRONTEND=noninteractive apt install -y tshark tcpdump
+      SHELL
+
+      destination.vm.network "private_network", ip: "192.168.3.3", netmask:"255.255.255.0"
+    end
+end
