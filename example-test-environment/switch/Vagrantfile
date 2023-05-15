@@ -17,7 +17,7 @@ Vagrant.configure("2") do |config|
     config.vm.define "switch" do |switch|
       switch.vm.box = "generic/debian11"
 
-      switch.vm.synced_folder "../../build", "/vagrant"
+      switch.vm.synced_folder "../../build", "/vagrant"     # use `vagrant rsync-auto` in this folder to make it automatically synced
       # switch.bindfs.bind_folder "/whatever", "/vagrant"
 
       switch.vm.provision "shell", inline:<<-'SHELL'
