@@ -58,7 +58,6 @@ void print_ifaces(void)
 // it should also attach it to a network interface programmatically with libbpf.
 int main(int argc, char **argv)
 {
-
 	struct router_bpf *skel;
 	struct bpf_link *link;
 	int err;
@@ -105,7 +104,6 @@ int main(int argc, char **argv)
 	sigaddset(&set, SIGINT);
 
 	sigwait(&set, &sig);
-
 
 cleanup:
 	// detach the BPF program from the interface
