@@ -2,7 +2,7 @@
 
 [![Github Actions](https://github.com/libbpf/libbpf-bootstrap/actions/workflows/build.yml/badge.svg)](https://github.com/libbpf/libbpf-bootstrap/actions/workflows/build.yml)
 
-## Minimal
+## minimal
 
 `minimal` is just that – a minimal practical BPF application example. It
 doesn't use or require BPF CO-RE, so should run on quite old kernels. It
@@ -22,7 +22,24 @@ $ sudo cat /sys/kernel/debug/tracing/trace_pipe
 `minimal` is great as a bare-bones experimental playground to quickly try out
 new ideas or BPF features.
 
-## Minimal_Legacy
+## minimal_ns
+
+`minimal_ns` is as same as `minimal` but for namespaced environments.
+`minimal` would not work in environments that have namespace, like containers,
+or WSL2, because the perceived pid of the process in the namespace is not the
+actual pid of the process. For executing `minimal` in namespaced environments
+you need to use `minimal_ns` instead.
+
+```shell
+$ cd examples/c
+$ make minimal_ns
+$ sudo ./minimal_ns
+$ sudo cat /sys/kernel/debug/tracing/trace_pipe
+           <...>-3840345 [022] d...1  8804.331204: bpf_trace_printk: BPF triggered from PID 9087.
+           <...>-3840345 [022] d...1  8804.331215: bpf_trace_printk: BPF triggered from PID 9087.
+```
+
+## minimal_Legacy
 
 This version of `minimal` is modified to allow running on even older kernels
 that do not allow global variables. bpf_printk uses global variables unless
@@ -41,7 +58,7 @@ $ sudo cat /sys/kernel/debug/tracing/trace_pipe
   minimal_legacy-52030 [001] .... 491230.842432: 0x00000001: BPF triggered from PID 52030.
 ```
 
-## Bootstrap
+## bootstrap
 
 `bootstrap` is an example of a simple (but realistic) BPF application. It
 tracks process starts (`exec()` family of syscalls, to be precise) and exits
@@ -90,7 +107,7 @@ TIME     EVENT COMM             PID     PPID    FILENAME/EXIT CODE
 ...
 ```
 
-## Uprobe
+## uprobe
 
 `uprobe` is an example of dealing with user-space entry and exit (return) probes,
 `uprobe` and `uretprobe` in libbpf lingo. It attached `uprobe` and `uretprobe`
@@ -119,7 +136,7 @@ $ sudo cat /sys/kernel/debug/tracing/trace_pipe
           uprobe-1809291 [007] .... 4017234.106701: 0: uprobed_sub EXIT: return = 0
 ```
 
-## USDT
+## usdt
 
 `usdt` is an example of dealing with USDT probe. It attaches USDT BPF programs to
 the [libc:setjmp](https://www.gnu.org/software/libc/manual/html_node/Non_002dlocal-Goto-Probes.html) probe, which is triggered by calling `setjmp` in user-space program once per second and logs USDT arguments using `bpf_printk()` macro:
@@ -141,7 +158,7 @@ $ sudo cat /sys/kernel/debug/tracing/trace_pipe
             usdt-1919077 [005] d..21 537311.886227: bpf_trace_printk: USDT manual attach to libc:setjmp: arg1 = 55d03d6a42a0, arg2 = 0, arg3 = 55d03d65e54e
 ```
 
-## Fentry
+## fentry
 
 `fentry` is an example that uses fentry and fexit BPF programs for tracing. It
 attaches `fentry` and `fexit` traces to `do_unlinkat()` which is called when a
@@ -176,7 +193,7 @@ $ sudo cat /sys/kernel/debug/tracing/trace_pipe
               rm-9290    [004] d..2  4637.798843: bpf_trace_printk: fexit: pid = 9290, filename = test_file2, ret = 0
 ```
 
-## Kprobe
+## kprobe
 
 `kprobe` is an example of dealing with kernel-space entry and exit (return)
 probes, `kprobe` and `kretprobe` in libbpf lingo. It attaches `kprobe` and
@@ -202,7 +219,7 @@ $ sudo cat /sys/kernel/debug/tracing/trace_pipe
               rm-9346    [005] d..4  4710.951895: bpf_trace_printk: KPROBE EXIT: ret = 0
 ```
 
-## XDP
+## xdp
 
 `xdp` is an example written in Rust (using libbpf-rs). It attaches to
 the ingress path of networking device and logs the size of each packet,
@@ -225,7 +242,7 @@ $ sudo cat /sys/kernel/debug/tracing/trace_pipe
            <...>-2813507 [000] d.s1 602386.696735: bpf_trace_printk: packet size: 66
 ```
 
-## TC
+## tc
 
 `tc` (short for Traffic Control) is an example of handling ingress network traffics.
 It creates a qdisc on the `lo` interface and attaches the `tc_ingress` BPF program to it.
@@ -249,7 +266,7 @@ $ sudo cat /sys/kernel/debug/tracing/trace_pipe
             node-1254811 [007] ..s1 8737831.674550: 0: Got IP packet: tot_len: 71, ttl: 64
 ```
 
-## Profile
+## profile
 
 `profile` is an example written in Rust and C with BlazeSym. It
 attaches to perf events, sampling on every processor periodically. It
@@ -271,7 +288,7 @@ No Userspace Stack
 
 C version and Rust version show the same content.  Both of them use BlazeSym to symbolize stacktraces.
 
-## Socket filter
+## sockfilter
 
 `sockfilter` is an example of monitoring packet and dealing with `__sk_buff`
 structure. It attaches `socket` BPF program to `sock_queue_rcv_skb()` function
@@ -293,7 +310,8 @@ This serves as a cross reference for folks coming from different backgrounds.
 
 ## Install Dependencies
 
-You will need `clang`, `libelf` and `zlib` to build the examples, package names may vary across distros.
+You will need `clang` (at least v11 or later), `libelf` and `zlib` to build
+the examples, package names may vary across distros.
 
 On Ubuntu/Debian, you need:
 ```shell
