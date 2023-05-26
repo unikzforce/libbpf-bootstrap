@@ -109,6 +109,8 @@ int xdp_router(struct xdp_md *ctx)
 forward:
 	fib_params.ifindex = ctx->ingress_ifindex;
 
+	return bpf_redirect(fib_params.ifindex, 0);
+
 	rc = bpf_fib_lookup(ctx, &fib_params, sizeof(fib_params), 0);
 
 	switch (rc) {
