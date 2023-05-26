@@ -69,8 +69,8 @@ int xdp_router(struct xdp_md *ctx)
 			return XDP_DROP;
 		struct iphdr *ip = l3hdr;
 
-		if (ip->ttl <= 1)
-			return XDP_PASS;
+//		if (ip->ttl <= 1)
+//			return XDP_PASS;
 
 		fib_params.family = AF_INET;
 		fib_params.tos = ip->tos;
@@ -89,8 +89,8 @@ int xdp_router(struct xdp_md *ctx)
 			return XDP_DROP;
 		struct ipv6hdr *ip6 = l3hdr;
 
-		if (ip6->hop_limit <= 1)
-			return XDP_PASS;
+//		if (ip6->hop_limit <= 1)
+//			return XDP_PASS;
 
 		fib_params.family = AF_INET6;
 		fib_params.flowinfo = *(__be32 *)ip6 & bpf_htonl(0x0FFFFFFF);
@@ -104,7 +104,7 @@ int xdp_router(struct xdp_md *ctx)
 		goto forward;
 	}
 
-	return XDP_PASS;
+//	return XDP_PASS;
 
 forward:
 	fib_params.ifindex = ctx->ingress_ifindex;
