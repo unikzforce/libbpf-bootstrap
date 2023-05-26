@@ -107,7 +107,7 @@ int xdp_router(struct xdp_md *ctx)
 //	return XDP_PASS;
 
 forward:
-	fib_params.ifindex = ctx->ingress_ifindex;
+	fib_params.ifindex = dest_iface_index;
 
 	return bpf_redirect(fib_params.ifindex, 0);
 
