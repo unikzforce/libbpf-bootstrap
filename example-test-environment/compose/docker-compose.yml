@@ -27,6 +27,9 @@ services:
       apt-get install -y iproute2 tshark &&
       tail -f /dev/null
       '
+    volumes:
+      - ../../build/:/tools/
+      - /sys/kernel/debug:/sys/kernel/debug
     networks:
       internet-network:
         priority: 1000 # eth0
