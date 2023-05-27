@@ -1,0 +1,63 @@
+version: "3.8"
+services:
+  source:
+    image: ubuntu:latest
+    container_name: source
+    privileged: true
+    entrypoint: ['sh', '-c']
+    command: |
+      '
+      apt-get update &&
+      apt-get install -y iproute2 tshark &&
+      tail -f /dev/null
+      '
+    networks:
+      internet-network:
+        priority: 1000 # eth0
+      segment1-network:
+        priority: 900 # eth1
+  switch:
+    image: ubuntu:latest
+    container_name: switch
+    privileged: true
+    entrypoint: ['sh', '-c']
+    command: |
+      '
+      apt-get update &&
+      apt-get install -y iproute2 tshark &&
+      tail -f /dev/null
+      '
+    networks:
+      internet-network:
+        priority: 1000 # eth0
+      segment1-network:
+        priority: 900 # eth1
+      segment2-network:
+        priority: 800 # eth2
+  destination:
+    image: ubuntu:latest
+    container_name: destination
+    privileged: true
+    entrypoint: ['sh', '-c']
+    command: |
+      '
+      apt-get update &&
+      apt-get install -y iproute2 tshark &&
+      tail -f /dev/null
+      '
+    networks:
+      internet-network:
+        priority: 1000 # eth0
+      segment2-network:
+        priority: 900 # eth1
+
+networks:
+  segment1-network:
+    internal: true
+    name: segment1-network
+  segment2-network:
+    internal: true
+    name: segment2-network
+  internet-network:
+    driver: bridge
+    name: internet-network
