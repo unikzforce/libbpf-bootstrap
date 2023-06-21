@@ -37,17 +37,21 @@ fn main() -> Result<()> {
         OFlag::empty(),
         nix::sys::stat::Mode::empty(),
     )?;
-
     let stat_result = fstatat(file_fd, "pid", nix::fcntl::AtFlags::empty())?;
 
     let skel_builder = MinimalNsSkelBuilder::default();
+
     let mut open_skel = skel_builder.open()?;
     open_skel.bss().dev = stat_result.st_dev;
     open_skel.bss().ino = stat_result.st_ino;
     open_skel.bss().my_pid = Pid::this().as_raw() as u32;
+
     let mut skel = open_skel.load()?;
 
     skel.attach()?;
+
+    println!("Successfully started! Please run `sudo cat /sys/kernel/debug/tracing/trace_pipe` "
+           "to see output of the BPF programs.\n");
 
     let running = Arc::new(AtomicBool::new(true));
     let r = running.clone();
