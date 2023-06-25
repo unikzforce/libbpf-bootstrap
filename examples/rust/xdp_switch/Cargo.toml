@@ -1,0 +1,21 @@
+[package]
+name = "xdp_switch"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+anyhow = "1.0"
+ctrlc = { version = "3.0", features = ["termination"] }
+libc = "*"
+structopt = "0.3"
+libbpf-rs = "0.20.1"
+nix = "0.26.2"
+network-interface = "1.0.1"
+moka = "0.11.2"
+blazesym = { path = "../../../blazesym", default-features = false, features = ["dont-generate-test-files"] }
+clap = { version = "3.1.18", features = ["derive"] }
+
+[build-dependencies]
+libbpf-cargo = "0.20.1"

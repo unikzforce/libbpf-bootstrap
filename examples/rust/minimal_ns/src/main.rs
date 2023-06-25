@@ -1,13 +1,12 @@
 use anyhow::{bail, Result};
-use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::Arc;
-use std::{thread, time};
 use nix::fcntl::{openat, OFlag};
 use nix::libc::AT_FDCWD;
 use nix::sys::stat::fstatat;
 use nix::unistd::Pid;
 use std::path::Path;
-
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Arc;
+use std::{thread, time};
 
 #[path = "bpf/.output/minimal_ns.skel.rs"]
 mod minimal_ns;
@@ -30,7 +29,6 @@ fn bump_memlock_rlimit() -> Result<()> {
 fn main() -> Result<()> {
     bump_memlock_rlimit()?;
 
-
     let file_fd = openat(
         AT_FDCWD,
         Path::new("/proc/self/ns/"),
@@ -50,8 +48,7 @@ fn main() -> Result<()> {
 
     skel.attach()?;
 
-    println!("Successfully started! Please run `sudo cat /sys/kernel/debug/tracing/trace_pipe` "
-           "to see output of the BPF programs.\n");
+    println!("Successfully started! Please run `sudo cat /sys/kernel/debug/tracing/trace_pipe` to see output of the BPF programs.\n");
 
     let running = Arc::new(AtomicBool::new(true));
     let r = running.clone();

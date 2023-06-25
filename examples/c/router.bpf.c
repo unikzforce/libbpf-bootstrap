@@ -1,8 +1,5 @@
 #include <linux/bpf.h>
-#include <linux/in.h>
 #include <linux/if_ether.h>
-#include <linux/if_packet.h>
-#include <linux/if_vlan.h>
 #include <linux/ip.h>
 #include <linux/ipv6.h>
 
