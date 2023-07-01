@@ -16,6 +16,7 @@ network-interface = "1.0.1"
 moka = "0.11.2"
 blazesym = { path = "../../../blazesym", default-features = false, features = ["dont-generate-test-files"] }
 clap = { version = "3.1.18", features = ["derive"] }
+macaddr = "1.0.1"
 
 [build-dependencies]
 libbpf-cargo = "0.20.1"

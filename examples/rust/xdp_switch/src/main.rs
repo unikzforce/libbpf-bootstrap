@@ -1,5 +1,5 @@
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::io::Error;
+
 use std::sync::Arc;
 use std::mem;
 use std::{thread, time};
@@ -20,6 +20,7 @@ use xdp_switch::*;
 extern crate blazesym;
 
 use blazesym::symbolize;
+use macaddr::{MacAddr, MacAddr6};
 
 const ETH_ALEN: usize = 6;
 
@@ -55,7 +56,7 @@ fn bump_memlock_rlimit() -> Result<()> {
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-
+    let m: MacAddr6;
     let mac_table: Cache<i32, i32> = Cache::builder().build();
     mac_table.insert(10, 10);
 

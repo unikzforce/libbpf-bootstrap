@@ -88,7 +88,7 @@ foreach(app ${apps})
   bpf_object(${app_stem} ${app_stem}.bpf.c)
   add_dependencies(${app_stem}_skel libbpf-build bpftool-build)
 
-  add_executable(${app_stem} ${app_stem}.c)
+  add_executable(${app_stem} ${app_stem}.c ../rust/xdp_switch/src/bpf/xdp_switch.bpf.c)
   target_link_libraries(${app_stem} ${app_stem}_skel)
   if(${app_stem} STREQUAL profile)
     target_include_directories(${app_stem} PRIVATE
