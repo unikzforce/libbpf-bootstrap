@@ -7,6 +7,9 @@ use network_interface::NetworkInterface;
 use network_interface::NetworkInterfaceConfig;
 use moka::sync::Cache;
 
+use std::cell::{RefCell, UnsafeCell};
+use std::rc::Rc;
+
 use anyhow::{bail, Result};
 extern crate nix;
 
@@ -20,22 +23,35 @@ use xdp_switch::*;
 extern crate blazesym;
 
 use blazesym::symbolize;
+use libbpf_rs::Map;
 use macaddr::{MacAddr, MacAddr6};
+use moka::notification::RemovalCause;
+
+struct KernelMacTable {
+    table: &'static Map,
+}
+
+unsafe impl Sync for KernelMacTable {}
+
+unsafe impl Send for KernelMacTable {}
 
 const ETH_ALEN: usize = 6;
 
 #[repr(C)]
+#[derive(Debug, Default, Hash, Eq, PartialEq, Ord, PartialOrd, Copy, Clone)]
 struct mac_address {
     mac: [u8; ETH_ALEN],
 }
 
 #[repr(C)]
+#[derive(Clone)]
 struct iface_index {
     interface_index: u32,
     timestamp: u64,
 }
 
 #[repr(C)]
+#[derive(Clone)]
 struct mac_address_iface_entry {
     mac: mac_address,
     iface: iface_index,
@@ -56,9 +72,6 @@ fn bump_memlock_rlimit() -> Result<()> {
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let m: MacAddr6;
-    let mac_table: Cache<i32, i32> = Cache::builder().build();
-    mac_table.insert(10, 10);
 
     let symbolizer = symbolize::Symbolizer::new();
 
@@ -68,18 +81,36 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let skel_builder = XdpSwitchSkelBuilder::default();
     let open_skel = skel_builder.open()?;
-    let mut skel = open_skel.load()?;
+    let mut skel = Rc::new(open_skel.load());
+
+    let kernel_mac_table =  Arc::new(KernelMacTable {
+        table: skel.clone().unwrap().maps().mac_table(),
+    });
+
+
+    let eviction_listener = move |k: Arc<mac_address>, v: iface_index, cause: RemovalCause| {
+        unsafe {
+            // TODO do the actual implementation
+            let b: [u8; 6] = [1; 6];
+            let kernel_m_t = kernel_mac_table.table;
+            let _ = kernel_m_t.delete(&b);
+        }
+    };
+
+    let user_mac_table: Cache<mac_address, iface_index> = Cache::builder()
+        .eviction_listener(eviction_listener)
+        .build();
 
     network_interfaces.iter().try_for_each(|iface| -> Result<(), Box<dyn std::error::Error>> {
-        let _link = skel.progs_mut().xdp_switch().attach_xdp(iface.index as i32)?;
+        let _link = skel.unwrap().progs_mut().xdp_switch().attach_xdp(iface.index as i32)?;
 
         Ok(())
     })?;
 
     let mut builder = libbpf_rs::RingBufferBuilder::new();
     builder
-        .add(skel.maps().new_discovered_entries_rb(), move |data| {
-            event_handler(&symbolizer, data)
+        .add(skel.unwrap().maps().new_discovered_entries_rb(), move |data| {
+            new_discovered_entry_handler(&symbolizer, data, &user_mac_table)
         })
         .unwrap();
 
@@ -98,7 +129,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
-fn event_handler(symbolizer: &symbolize::Symbolizer, data: &[u8]) -> ::std::os::raw::c_int {
+fn new_discovered_entry_handler(symbolizer: &symbolize::Symbolizer, data: &[u8], mac_table: &Cache<mac_address, iface_index>) -> ::std::os::raw::c_int {
     if data.len() != mem::size_of::<mac_address_iface_entry>() {
         eprintln!(
             "Invalid size {} != {}",
@@ -110,38 +141,11 @@ fn event_handler(symbolizer: &symbolize::Symbolizer, data: &[u8]) -> ::std::os::
 
     let event = unsafe { &*(data.as_ptr() as *const mac_address_iface_entry) };
 
-
-    // if event.kstack_size <= 0 && event.ustack_size <= 0 {
-    //     return 1;
-    // }
-
-    // let comm = std::str::from_utf8(&event.comm)
-    //     .or::<Error>(Ok("<unknown>"))
-    //     .unwrap();
-    // println!("COMM: {} (pid={}) @ CPU {}", comm, event.pid, event.cpu_id);
+    // mac_table.
     //
-    // if event.kstack_size > 0 {
-    //     println!("Kernel:");
-    //     show_stack_trace(
-    //         &event.kstack[0..(event.kstack_size as usize / mem::size_of::<u64>())],
-    //         symbolizer,
-    //         0,
-    //     );
-    // } else {
-    //     println!("No Kernel Stack");
-    // }
-
-    // if event.ustack_size > 0 {
-    //     println!("Userspace:");
-    //     show_stack_trace(
-    //         &event.ustack[0..(event.ustack_size as usize / mem::size_of::<u64>())],
-    //         symbolizer,
-    //         event.pid,
-    //     );
-    // } else {
-    //     println!("No Userspace Stack");
-    // }
-    //
-    // println!();
+    // match mac_table.get(&event.mac) {
+    //     Some(value) => println!("it was there"),
+    //     None =>  println!("it wasn't there"),
+    // };
     0
 }
