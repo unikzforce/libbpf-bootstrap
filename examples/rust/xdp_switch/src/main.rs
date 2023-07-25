@@ -1,6 +1,6 @@
 use std::sync::atomic::{AtomicBool, Ordering};
 
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 use std::mem;
 use std::{thread, time};
 use network_interface::NetworkInterface;
@@ -11,6 +11,7 @@ use std::cell::{RefCell, UnsafeCell};
 use std::rc::Rc;
 
 use anyhow::{bail, Result};
+
 extern crate nix;
 
 extern crate libbpf_rs;
@@ -24,16 +25,7 @@ extern crate blazesym;
 
 use blazesym::symbolize;
 use libbpf_rs::Map;
-use macaddr::{MacAddr, MacAddr6};
 use moka::notification::RemovalCause;
-
-struct KernelMacTable {
-    table: &'static Map,
-}
-
-unsafe impl Sync for KernelMacTable {}
-
-unsafe impl Send for KernelMacTable {}
 
 const ETH_ALEN: usize = 6;
 
@@ -71,48 +63,69 @@ fn bump_memlock_rlimit() -> Result<()> {
     Ok(())
 }
 
-fn main() -> Result<(), Box<dyn std::error::Error>> {
+// struct SyncMap<'a>(UnsafeCell<&'a Map>);
+//
+// unsafe impl<'a> Send for SyncMap<'a> {}
+// unsafe impl<'a> Sync for SyncMap<'a> {}
 
+fn main() -> Result<(), Box<dyn std::error::Error>> {
     let symbolizer = symbolize::Symbolizer::new();
 
     bump_memlock_rlimit()?;
 
     let network_interfaces = NetworkInterface::show()?;
 
+
     let skel_builder = XdpSwitchSkelBuilder::default();
     let open_skel = skel_builder.open()?;
-    let mut skel = Rc::new(open_skel.load());
+    let skel = Arc::new(Mutex::new(open_skel.load()?));
 
-    let kernel_mac_table =  Arc::new(KernelMacTable {
-        table: skel.clone().unwrap().maps().mac_table(),
-    });
-
-
+    let skel_for_eviction_clone = Arc::clone(&skel);
     let eviction_listener = move |k: Arc<mac_address>, v: iface_index, cause: RemovalCause| {
-        unsafe {
-            // TODO do the actual implementation
+        if let Ok(mut skel_guard) = skel_for_eviction_clone.lock() {
+            let skel_ref = &mut *skel_guard;
+            let maps = skel_ref.maps();
+            let kernel_mac_table = maps.mac_table();
             let b: [u8; 6] = [1; 6];
-            let kernel_m_t = kernel_mac_table.table;
-            let _ = kernel_m_t.delete(&b);
+            kernel_mac_table.delete(&b);
+        } else {
+            eprintln!("Failed to get mutable access to skel in eviction_listener");
         }
     };
 
-    let user_mac_table: Cache<mac_address, iface_index> = Cache::builder()
-        .eviction_listener(eviction_listener)
-        .build();
+    let user_mac_table: Arc<Mutex<Cache<mac_address, iface_index>>> = Arc::new(
+        Mutex::new(
+            Cache::builder()
+                .eviction_listener(eviction_listener)
+                .build(),
+        )
+    );
 
-    network_interfaces.iter().try_for_each(|iface| -> Result<(), Box<dyn std::error::Error>> {
-        let _link = skel.unwrap().progs_mut().xdp_switch().attach_xdp(iface.index as i32)?;
-
+    let skel_for_attach_clone = Arc::clone(&skel);
+    network_interfaces.iter().try_for_each(move |iface| -> Result<(), Box<dyn std::error::Error>> {
+        if let Ok(mut skel_guard) = skel_for_attach_clone.lock() {
+            let skel_ref = &mut *skel_guard;
+            let progs_mut = &mut skel_ref.progs_mut();
+            let _link = progs_mut.xdp_switch().attach_xdp(iface.index as i32)?;
+        } else {
+            eprintln!("Failed to get mutable access to skel in main");
+        }
         Ok(())
     })?;
 
     let mut builder = libbpf_rs::RingBufferBuilder::new();
-    builder
-        .add(skel.unwrap().maps().new_discovered_entries_rb(), move |data| {
-            new_discovered_entry_handler(&symbolizer, data, &user_mac_table)
-        })
-        .unwrap();
+    let skel_for_new_discoveries_clone = Arc::clone(&skel);
+    if let Ok(mut skel_guard) = skel_for_new_discoveries_clone.lock() {
+        let skel_ref = &mut *skel_guard;
+        let maps = skel_ref.maps();
+        builder
+            .add(maps.new_discovered_entries_rb(), move |data| {
+                new_discovered_entry_handler(&symbolizer, data, &(*user_mac_table.lock().unwrap()))
+            })
+            .unwrap();
+    } else {
+        eprintln!("Failed to get mutable access to skel in main");
+    }
 
 
     let running = Arc::new(AtomicBool::new(true));
