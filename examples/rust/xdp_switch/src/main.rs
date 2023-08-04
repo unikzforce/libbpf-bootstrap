@@ -6,6 +6,7 @@ use std::{thread, time};
 use network_interface::NetworkInterface;
 use network_interface::NetworkInterfaceConfig;
 use moka::sync::Cache;
+use clap::{Parser, Subcommand};
 
 use std::cell::{RefCell, UnsafeCell};
 use std::rc::Rc;
@@ -63,17 +64,26 @@ fn bump_memlock_rlimit() -> Result<()> {
     Ok(())
 }
 
-// struct SyncMap<'a>(UnsafeCell<&'a Map>);
-//
-// unsafe impl<'a> Send for SyncMap<'a> {}
-// unsafe impl<'a> Sync for SyncMap<'a> {}
+
+#[derive(Parser)]
+#[command(author, version, about, long_about = None)]
+struct Cli {
+    #[clap(short, long)]
+    exclude: String,
+}
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let cli = Cli::parse();
     let symbolizer = symbolize::Symbolizer::new();
 
     bump_memlock_rlimit()?;
 
-    let network_interfaces = NetworkInterface::show()?;
+    let network_interfaces: Vec<NetworkInterface> = NetworkInterface::show()?;
+
+    let filtered_network_interfaces = network_interfaces
+        .into_iter()
+        .filter(|iface| iface.name != cli.exclude)
+        .collect();
 
 
     let skel_builder = XdpSwitchSkelBuilder::default();
