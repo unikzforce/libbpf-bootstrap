@@ -80,11 +80,14 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let network_interfaces: Vec<NetworkInterface> = NetworkInterface::show()?;
 
-    let filtered_network_interfaces = network_interfaces
+    let filtered_network_interfaces: Vec<_> = network_interfaces
         .into_iter()
         .filter(|iface| iface.name != cli.exclude)
         .collect();
 
+    for iface in filtered_network_interfaces {
+        println!("iface name {}", iface.name);
+    }
 
     let skel_builder = XdpSwitchSkelBuilder::default();
     let open_skel = skel_builder.open()?;
