@@ -17,6 +17,8 @@ moka = "0.11.2"
 blazesym = { path = "../../../blazesym", default-features = false, features = ["dont-generate-test-files"] }
 macaddr = "1.0.1"
 clap = { version = "4.3.19", features = ["derive"] }
+chrono = "0.4.26"
+crossbeam-channel = "0.5.8"
 
 [build-dependencies]
 libbpf-cargo = "0.20.1"
