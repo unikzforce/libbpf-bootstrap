@@ -19,6 +19,7 @@ macaddr = "1.0.1"
 clap = { version = "4.3.19", features = ["derive"] }
 chrono = "0.4.26"
 crossbeam-channel = "0.5.8"
+unsafe-send-sync = "0.1.0"
 
 [build-dependencies]
 libbpf-cargo = "0.20.1"
