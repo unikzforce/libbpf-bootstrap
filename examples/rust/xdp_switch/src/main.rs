@@ -3,6 +3,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::mem;
 use std::{thread, time};
+use std::time::Duration;
 use network_interface::NetworkInterface;
 use network_interface::NetworkInterfaceConfig;
 use moka::sync::Cache;
@@ -34,14 +35,14 @@ struct mac_address {
 }
 
 #[repr(C)]
-#[derive(Clone)]
+#[derive(Debug,  Clone)]
 struct iface_index {
     interface_index: u32,
     timestamp: u64,
 }
 
 #[repr(C)]
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 struct mac_address_iface_entry {
     mac: mac_address,
     iface: iface_index,
@@ -106,7 +107,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                     let current_time = Utc::now().timestamp();
                     let time_difference = current_time - timestamp_seconds as i64;
 
-                    if time_difference < 500 {
+                    if time_difference < 30 {
                         sender.send(mac_address_iface_entry {
                             mac: *k.clone().as_ref(),
                             iface: v.clone(),
@@ -131,18 +132,17 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         UnsafeSend::new(
             Cache::builder()
                 .eviction_listener(eviction_listener)
+                .time_to_live(Duration::from_secs(30))
                 .build(),
         )
     );
 
     let user_mac_table_clone = Arc::clone(&user_mac_table);
-    let receiver_thread = thread::spawn(move || {
+    let _receiver_thread = thread::spawn(move || {
         while let Ok(item) = receiver.recv() {
             let _ = user_mac_table_clone.as_ref().insert(item.mac, item.iface);
         }
     });
-
-    receiver_thread.join().expect("Failed to join the receiver thread");
 
 
     let mut skel_for_attach_clone = Arc::clone(&skel);
@@ -175,9 +175,14 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         r.store(false, Ordering::SeqCst);
     })?;
 
+    let user_mac_table_clone_3 = Arc::clone(&user_mac_table);
     while running.load(Ordering::SeqCst) {
-        eprint!(".");
-        thread::sleep(time::Duration::from_secs(1));
+        thread::sleep(time::Duration::from_secs(5));
+        println!("Content of the user_mac_table");
+        for (key, value) in user_mac_table_clone_3.as_ref().iter() {
+            // println!("the Key is {}, the value is {}", key.clone().as_ref(), value)
+            println!("the Key is {:?}, the value is {:?}, the last registered time is {:?}", key.mac ,value.interface_index, value.timestamp)
+        }
     }
 
     Ok(())

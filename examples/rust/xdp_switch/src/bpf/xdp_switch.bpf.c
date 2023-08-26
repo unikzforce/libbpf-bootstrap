@@ -37,7 +37,7 @@ void register_source_mac_address_if_required(const struct xdp_md *ctx, const str
 		struct mac_address_iface_entry *new_entry = bpf_ringbuf_reserve(
 			&new_discovered_entries_rb, sizeof(struct mac_address_iface_entry), 0);
 
-		__builtin_memcpy(&new_entry->mac.mac, eth->h_dest, ETH_ALEN);
+		__builtin_memcpy(&new_entry->mac.mac, eth->h_source, ETH_ALEN);
 		new_entry->iface.interface_index = ctx->ingress_ifindex;
 		new_entry->iface.timestamp = current_time;
 
