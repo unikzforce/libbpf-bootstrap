@@ -4,17 +4,17 @@
 
 struct mac_address {
 	unsigned char mac[ETH_ALEN]; // MAC address
-};
+} __attribute__((packed, aligned(4)));
 
 struct iface_index {
 	__u32 interface_index;
 	__u64 timestamp;
-};
+} __attribute__((packed, aligned(4)));
 
 struct mac_address_iface_entry {
 	struct mac_address mac;
 	struct iface_index iface;
-};
+} __attribute__((packed, aligned(4)));
 
 
 

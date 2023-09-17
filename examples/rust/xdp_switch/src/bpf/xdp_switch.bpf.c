@@ -19,10 +19,7 @@ struct {
 
 struct {
 	__uint(type, BPF_MAP_TYPE_RINGBUF);
-	__uint(key_size, 0);
-	__type(value, struct mac_address_iface_entry);
-	__uint(value_size, sizeof(struct mac_address_iface_entry));
-	__uint(max_entries, 4 * 1024);
+	__uint(max_entries, 256 * 1024);
 } new_discovered_entries_rb SEC(".maps") __weak;
 
 void register_source_mac_address_if_required(const struct xdp_md *ctx, const struct ethhdr *eth)
