@@ -145,13 +145,16 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     });
 
 
-    let mut skel_for_attach_clone = Arc::clone(&skel);
+    let skel_for_attach_clone = Arc::clone(&skel);
     filtered_network_interfaces.iter().try_for_each(move |iface| -> Result<(), Box<dyn std::error::Error>> {
-        if let Some(skel_for_attach_inner) = Arc::get_mut(&mut skel_for_attach_clone) {
-            let _link = skel_for_attach_inner.progs_mut().xdp_switch().attach_xdp(iface.index as i32)?;
-        } else {
-            eprintln!("Failed to obtain mutable reference to skel");
-        }
+        // if let Some(skel_for_attach_inner) = Arc::get_mut(&mut skel_for_attach_clone) {
+        let skel_mut_ref: &mut UnsafeSend<XdpSwitchSkel> = unsafe {
+            &mut *(Arc::as_ptr(&skel_for_attach_clone) as *mut _)
+        };
+        let _link = skel_mut_ref.progs_mut().xdp_switch().attach_xdp(iface.index as i32)?;
+        // } else {
+        //     eprintln!("Failed to obtain mutable reference to skel");
+        // }
         Ok(())
     })?;
 
