@@ -31,33 +31,52 @@ void register_source_mac_address_if_required(const struct xdp_md *ctx, const str
 	struct iface_index *iface_for_source_mac = bpf_map_lookup_elem(&mac_table, &source_mac_addr);
 
 	if (!iface_for_source_mac) {
-		struct mac_address_iface_entry *new_entry = bpf_ringbuf_reserve(
-			&new_discovered_entries_rb, sizeof(struct mac_address_iface_entry), 0);
+		//		struct mac_address_iface_entry *new_entry = bpf_ringbuf_reserve(
+		//			&new_discovered_entries_rb, sizeof(struct mac_address_iface_entry), 0);
 
-		__builtin_memcpy(&new_entry->mac.mac, eth->h_source, ETH_ALEN);
-		new_entry->iface.interface_index = ctx->ingress_ifindex;
-		new_entry->iface.timestamp = current_time;
+		struct mac_address_iface_entry new_entry = {
+			.mac = {
+				.mac = {0xAA, 0xBB, 0xCC, 0xDD, 0xEE, 0xFF}
+			},
+			.iface = {
+				.interface_index = ctx->ingress_ifindex,
+				.timestamp = current_time
+			}
+		};
 
-		bpf_map_update_elem(&mac_table, &new_entry->mac, &new_entry->iface, BPF_ANY);
-		bpf_ringbuf_submit(new_entry, 0);
+		memset(&new_entry, 0, sizeof(new_entry));
+
+		__builtin_memcpy(new_entry.mac.mac, eth->h_source, ETH_ALEN);
+		new_entry.iface.interface_index = ctx->ingress_ifindex;
+		new_entry.iface.timestamp = current_time;
+
+		bpf_map_update_elem(&mac_table, &(new_entry.mac), &(new_entry.iface), BPF_ANY);
+		//		bpf_ringbuf_submit(new_entry, 0);
+		bpf_ringbuf_output(&new_discovered_entries_rb, &new_entry, sizeof(new_entry), 0);
 	} else {
 		iface_for_source_mac->timestamp = current_time;
 		bpf_map_update_elem(&mac_table, &source_mac_addr, iface_for_source_mac, BPF_ANY);
 	}
 }
 
-// main router logic
 SEC("xdp")
 long xdp_switch(struct xdp_md *ctx)
 {
 	struct ethhdr *eth = (void *)(long)ctx->data;
 
+	// Additional check after the adjustment
+	if ((void *)(eth + 1) > (void *)(long)ctx->data_end)
+		return XDP_ABORTED;
+
 	register_source_mac_address_if_required(ctx, eth);
 
 	struct mac_address dest_mac_addr;
-	__builtin_memcpy(dest_mac_addr.mac, eth->h_source, ETH_ALEN);
+	__builtin_memcpy(dest_mac_addr.mac, eth->h_dest, ETH_ALEN);  // Changed from h_source to h_dest
 
 	struct iface_index *iface_to_redirect = bpf_map_lookup_elem(&mac_table, &dest_mac_addr);
+
+	if (!iface_to_redirect)
+		return XDP_PASS;  // If the destination MAC isn't found, simply pass the packet
 
 	return bpf_redirect(iface_to_redirect->interface_index, 0);
 }
