@@ -44,7 +44,7 @@ void register_source_mac_address_if_required(const struct xdp_md *ctx, const str
 			}
 		};
 
-		memset(&new_entry, 0, sizeof(new_entry));
+		__builtin_memset(&new_entry, 0, sizeof(new_entry));
 
 		__builtin_memcpy(new_entry.mac.mac, eth->h_source, ETH_ALEN);
 		new_entry.iface.interface_index = ctx->ingress_ifindex;
