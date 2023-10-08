@@ -1,29 +1,26 @@
-use std::u64;
-
-use std::boxed::Box;
 use std::io::Error;
 use std::mem;
-use std::result::Result;
+use std::path::PathBuf;
 use std::time::Duration;
 
-extern crate nix;
+use blazesym::symbolize;
+
+use clap::ArgAction;
+use clap::Parser;
+
 use nix::unistd::close;
 
-extern crate libbpf_rs;
-
-extern crate clap;
-use clap::Parser;
+use tracing::subscriber::set_global_default as set_global_subscriber;
+use tracing_subscriber::filter::LevelFilter;
+use tracing_subscriber::fmt::format::FmtSpan;
+use tracing_subscriber::fmt::time::SystemTime;
+use tracing_subscriber::FmtSubscriber;
 
 #[path = "bpf/.output/profile.skel.rs"]
 mod profile;
-use profile::*;
-
-extern crate blazesym;
-use blazesym::symbolize;
-
-extern crate libc;
-
 mod syscall;
+
+use profile::*;
 
 const MAX_STACK_DEPTH: usize = 128;
 const TASK_COMM_LEN: usize = 16;
@@ -96,50 +93,44 @@ fn show_stack_trace(stack: &[u64], symbolizer: &symbolize::Symbolizer, pid: u32)
         symbolize::Source::from(symbolize::Process::new(pid.into()))
     };
 
-    let syms = symbolizer.symbolize(&src, stack).unwrap();
-    for i in 0..stack.len() {
-        if syms.len() <= i || syms[i].len() == 0 {
-            println!("  {} [<{:016x}>]", i, stack[i]);
-            continue;
+    let syms = match symbolizer.symbolize(&src, stack) {
+        Ok(syms) => syms,
+        Err(err) => {
+            eprintln!("  failed to symbolize addresses: {err:#}");
+            return;
         }
+    };
 
-        if syms[i].len() == 1 {
-            let sym = &syms[i][0];
-            if !sym.path.as_os_str().is_empty() {
-                println!(
-                    "  {} [<{:016x}>] {}+0x{:x} {}:{}",
-                    i,
-                    stack[i],
-                    sym.symbol,
-                    stack[i] - sym.addr,
-                    sym.path.display(),
-                    sym.line
-                );
-            } else {
-                println!(
-                    "  {} [<{:016x}>] {}+0x{}",
-                    i,
-                    stack[i],
-                    sym.symbol,
-                    stack[i] - sym.addr
-                );
-            }
-            continue;
-        }
+    for (i, (addr, syms)) in stack.iter().zip(syms).enumerate() {
+        let mut addr_fmt = format!(" {i:2} [<{addr:016x}>]");
+        if syms.is_empty() {
+            println!("{addr_fmt}")
+        } else {
+            for (i, sym) in syms.into_iter().enumerate() {
+                if i == 1 {
+                    addr_fmt = addr_fmt.replace(|_c| true, " ");
+                }
 
-        println!("  {} [<{:016x}>]", i, stack[i]);
+                let path = match (sym.dir, sym.file) {
+                    (Some(dir), Some(file)) => Some(dir.join(file)),
+                    (dir, file) => dir.or_else(|| file.map(PathBuf::from)),
+                };
 
-        for sym in &syms[i] {
-            if !sym.path.as_os_str().is_empty() {
-                println!(
-                    "        {}+0x{:x} {}:{}",
-                    sym.symbol,
-                    stack[i] - sym.addr,
-                    sym.path.display(),
-                    sym.line
-                );
-            } else {
-                println!("        {}+0x{}", sym.symbol, stack[i] - sym.addr);
+                let src_loc = if let (Some(path), Some(line)) = (path, sym.line) {
+                    if let Some(col) = sym.column {
+                        format!(" {}:{line}:{col}", path.display())
+                    } else {
+                        format!(" {}:{line}", path.display())
+                    }
+                } else {
+                    String::new()
+                };
+
+                let symbolize::Sym {
+                    name, addr, offset, ..
+                } = sym;
+
+                println!("{addr_fmt} {name} @ {addr:#x}+{offset:#x}{src_loc}");
             }
         }
     }
@@ -195,12 +186,29 @@ fn event_handler(symbolizer: &symbolize::Symbolizer, data: &[u8]) -> ::std::os::
 #[derive(Parser, Debug)]
 struct Args {
     /// Sampling frequency
-    #[clap(short, default_value_t = 1)]
+    #[arg(short, default_value_t = 1)]
     freq: u64,
+    /// Increase verbosity (can be supplied multiple times).
+    #[arg(short = 'v', long = "verbose", global = true, action = ArgAction::Count)]
+    verbosity: u8,
 }
 
 fn main() -> Result<(), Error> {
     let args = Args::parse();
+    let level = match args.verbosity {
+        0 => LevelFilter::WARN,
+        1 => LevelFilter::INFO,
+        2 => LevelFilter::DEBUG,
+        _ => LevelFilter::TRACE,
+    };
+
+    let subscriber = FmtSubscriber::builder()
+        .with_max_level(level)
+        .with_span_events(FmtSpan::FULL)
+        .with_timer(SystemTime)
+        .finish();
+    let () = set_global_subscriber(subscriber).expect("failed to set tracing subscriber");
+
     let freq = if args.freq < 1 { 1 } else { args.freq };
 
     let symbolizer = symbolize::Symbolizer::new();
