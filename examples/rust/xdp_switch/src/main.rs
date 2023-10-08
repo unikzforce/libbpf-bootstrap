@@ -1,6 +1,6 @@
 use std::sync::atomic::{AtomicBool, Ordering};
 
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 use std::mem;
 use std::{thread, time};
 use std::time::Duration;
@@ -8,6 +8,8 @@ use network_interface::NetworkInterface;
 use network_interface::NetworkInterfaceConfig;
 use moka::sync::Cache;
 use clap::Parser;
+use libbpf_rs::skel::OpenSkel;
+use libbpf_rs::skel::SkelBuilder;
 
 use anyhow::{bail, Result};
 use crossbeam_channel::{unbounded, Receiver, Sender};
@@ -22,7 +24,7 @@ mod xdp_switch;
 use xdp_switch::*;
 
 use chrono::Utc;
-use libbpf_rs::MapFlags;
+use libbpf_rs::{Link, MapFlags};
 use moka::notification::RemovalCause;
 use unsafe_send_sync::UnsafeSend;
 
@@ -146,17 +148,34 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 
     let skel_for_attach_clone = Arc::clone(&skel);
+    let links: Arc<Mutex<Vec<Link>>> = Arc::new(Mutex::new(Vec::new()));
+    let cloned_links = Arc::clone(&links);
     filtered_network_interfaces.iter().try_for_each(move |iface| -> Result<(), Box<dyn std::error::Error>> {
         // if let Some(skel_for_attach_inner) = Arc::get_mut(&mut skel_for_attach_clone) {
         let skel_mut_ref: &mut UnsafeSend<XdpSwitchSkel> = unsafe {
             &mut *(Arc::as_ptr(&skel_for_attach_clone) as *mut _)
         };
+        println!("trying to attach to network card {:?}", iface.name);
         let _link = skel_mut_ref.progs_mut().xdp_switch().attach_xdp(iface.index as i32)?;
+
+        let mut links_guard = cloned_links.lock().unwrap();
+        links_guard.push(_link);
+
+        // skel_mut_ref.links = XdpSwitchLinks {
+        //     xdp_switch: Some(_link)
+        // };
+
+        println!("successful attachment to network card {:?}", iface.name);
         // } else {
         //     eprintln!("Failed to obtain mutable reference to skel");
         // }
         Ok(())
     })?;
+
+    let links_guard = links.lock().unwrap();
+    for link in &*links_guard {
+        println!("link {:?}", link)
+    }
 
     let mut builder = libbpf_rs::RingBufferBuilder::new();
     let skel_for_new_discoveries_clone = Arc::clone(&skel);

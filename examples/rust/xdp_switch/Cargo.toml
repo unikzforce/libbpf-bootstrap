@@ -10,7 +10,7 @@ anyhow = "1.0"
 ctrlc = { version = "3.0", features = ["termination"] }
 libc = "*"
 structopt = "0.3"
-libbpf-rs = "0.20.1"
+libbpf-rs = "0.21.2"
 nix = "0.26.2"
 network-interface = "1.0.1"
 moka = "0.11.2"
@@ -22,4 +22,4 @@ crossbeam-channel = "0.5.8"
 unsafe-send-sync = "0.1.0"
 
 [build-dependencies]
-libbpf-cargo = "0.20.1"
+libbpf-cargo = "0.21.2"
