@@ -3,7 +3,6 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 use std::mem;
 use std::{thread, time};
-use std::collections::HashSet;
 use std::time::Duration;
 use network_interface::NetworkInterface;
 use network_interface::NetworkInterfaceConfig;
@@ -71,11 +70,11 @@ fn bump_memlock_rlimit() -> Result<()> {
 struct Cli {
     #[clap(short, long, value_delimiter = ' ', num_args = 1..)]
     /// List of items to exclude
-    excludes: HashSet<String>,
+    excludes: Vec<String>,
 
     #[clap(short, long, value_delimiter = ' ', num_args = 1..)]
     /// List of items to include
-    includes: HashSet<String>,
+    includes: Vec<String>,
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
