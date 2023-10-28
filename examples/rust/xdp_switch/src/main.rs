@@ -3,6 +3,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 use std::mem;
 use std::{thread, time};
+use std::collections::HashSet;
 use std::time::Duration;
 use network_interface::NetworkInterface;
 use network_interface::NetworkInterfaceConfig;
@@ -68,8 +69,13 @@ fn bump_memlock_rlimit() -> Result<()> {
 #[derive(Parser)]
 #[command(author, version, about, long_about = None)]
 struct Cli {
-    #[clap(short, long)]
-    exclude: String,
+    #[clap(short, long, value_delimiter = ' ', num_args = 1..)]
+    /// List of items to exclude
+    excludes: HashSet<String>,
+
+    #[clap(short, long, value_delimiter = ' ', num_args = 1..)]
+    /// List of items to include
+    includes: HashSet<String>,
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -77,16 +83,29 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let cli = Cli::parse();
 
-    println!("excluded item {}", cli.exclude);
+    cli.excludes.iter().for_each( | item | {
+        println!("excluded item {}", item);
+    });
+
+    cli.includes.iter().for_each( | item | {
+        println!("included item {}", item);
+    });
 
     bump_memlock_rlimit()?;
 
     let network_interfaces: Vec<NetworkInterface> = NetworkInterface::show()?;
 
-    let filtered_network_interfaces: Vec<_> = network_interfaces
-        .into_iter()
-        .filter(|iface| iface.name != cli.exclude)
-        .collect();
+    let filtered_network_interfaces: Vec<_> = if !cli.includes.is_empty() {
+        network_interfaces
+            .into_iter()
+            .filter(|iface| cli.includes.contains(&iface.name))
+            .collect()
+    } else {
+        network_interfaces
+            .into_iter()
+            .filter(|iface| !cli.excludes.contains(&iface.name))
+            .collect()
+    };
 
     let skel_builder = XdpSwitchSkelBuilder::default();
     let open_skel = skel_builder.open()?;
