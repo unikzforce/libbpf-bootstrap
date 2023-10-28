@@ -22,7 +22,7 @@ struct {
 	__uint(max_entries, 256 * 1024);
 } new_discovered_entries_rb SEC(".maps") __weak;
 
-void register_source_mac_address_if_required(const struct xdp_md *ctx, const struct ethhdr *eth, __u64 current_time)
+int register_source_mac_address_if_required(const struct xdp_md *ctx, const struct ethhdr *eth, __u64 current_time)
 {
 
     bpf_printk("id = %llx, learning-process: register source mac address if required\n", current_time);
@@ -65,6 +65,8 @@ void register_source_mac_address_if_required(const struct xdp_md *ctx, const str
         bpf_map_update_elem(&mac_table, &source_mac_addr, iface_for_source_mac, BPF_ANY);
         bpf_printk("id = %llx, learning-process: have Found an already registered entry for source mac address + updated the timestamp\n", current_time);
 	}
+
+    return 0;
 }
 
 SEC("xdp")
