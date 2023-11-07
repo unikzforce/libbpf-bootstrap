@@ -93,7 +93,7 @@ long xdp_switch(struct xdp_md *ctx)
 	__builtin_memcpy(dest_mac_addr.mac, eth->h_dest,
 			 ETH_ALEN); // Changed from h_source to h_dest
 
-	bpf_printk("id = %llx, lookup mac_table for matching redirect iface\n", current_time);
+	bpf_printk("id = %llx, lookup mac_table for matching redirect iface, eth->h_dest = %.6s\n", current_time, eth->h_dest);
 
 	struct iface_index *iface_to_redirect = bpf_map_lookup_elem(&mac_table, &dest_mac_addr);
 
