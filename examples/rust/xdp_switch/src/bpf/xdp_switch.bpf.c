@@ -9,7 +9,7 @@ char LICENSE[] SEC("license") = "Dual BSD/GPL";
 
 
 __u32 switch_interfaces[20] = { 0 };
-__u32 switch_interfaces_count;
+__u32 switch_interfaces_count = 0;
 
 struct {
 	__uint(type, BPF_MAP_TYPE_HASH);
@@ -97,11 +97,14 @@ long xdp_switch(struct xdp_md *ctx)
 	__builtin_memcpy(dest_mac_addr.mac, eth->h_dest,
 			 ETH_ALEN); // Changed from h_source to h_dest
 
-	bpf_printk("id = %llx, lookup mac_table for matching redirect iface, MAC: %02x:%02x:%02x\n",
+	bpf_printk("id = %llx, lookup mac_table for matching redirect iface, MAC: %02x:%02x:%02x:%02x:%02x:%02x\n",
 		   current_time,
 		   eth->h_dest[0],
 		   eth->h_dest[1],
-		   eth->h_dest[2]);
+		   eth->h_dest[2],
+		   eth->h_dest[3],
+		   eth->h_dest[4],
+		   eth->h_dest[5]);
 
 	struct iface_index *iface_to_redirect = bpf_map_lookup_elem(&mac_table, &dest_mac_addr);
 
