@@ -8,8 +8,8 @@
 char LICENSE[] SEC("license") = "Dual BSD/GPL";
 
 
-__u32 switch_interfaces[20] = { 0 };
-__u32 switch_interfaces_count = 0;
+__u32 first_interface = 0;
+__u32 second_interface = 0;
 
 struct {
 	__uint(type, BPF_MAP_TYPE_HASH);
@@ -119,10 +119,11 @@ long xdp_switch(struct xdp_md *ctx)
 			// in this case we need to redirect to interfaces that is not equal to ctx->ingress_ifindex
 			// the problem is that this program would work if the switch have 2 interfaces not more,
 			// because in this type of XDP program we cannot redirect a packet to two interfaces.
-			for (int i = 0; i < switch_interfaces_count; i++) {
-				if (switch_interfaces[i] != ctx->ingress_ifindex) {
-					return bpf_redirect(switch_interfaces[i], 0);
-				}
+			if (ctx->ingress_ifindex != first_interface) {
+				return bpf_redirect(first_interface, 0);
+			}
+			if (ctx->ingress_ifindex != second_interface) {
+				return bpf_redirect(second_interface, 0);
 			}
 		}
 		return XDP_PASS; // If the destination MAC isn't found, simply pass the packet
