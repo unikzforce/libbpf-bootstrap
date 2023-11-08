@@ -107,7 +107,13 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     };
 
     let skel_builder = XdpSwitchSkelBuilder::default();
-    let open_skel = skel_builder.open()?;
+    let mut open_skel = skel_builder.open()?;
+    open_skel.bss().switch_interfaces_count = filtered_network_interfaces.len() as u32;
+
+    for (i, iface) in filtered_network_interfaces.iter().enumerate() {
+        open_skel.bss().switch_interfaces[i] = iface.index;
+    }
+
     let skel = Arc::new(UnsafeSend::new(open_skel.load()?));
 
     let skel_for_eviction_clone = Arc::clone(&skel);

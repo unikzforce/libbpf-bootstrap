@@ -7,6 +7,10 @@
 
 char LICENSE[] SEC("license") = "Dual BSD/GPL";
 
+
+__u32 switch_interfaces[20] = { 0 };
+__u32 switch_interfaces_count;
+
 struct {
 	__uint(type, BPF_MAP_TYPE_HASH);
 	__type(key, struct mac_address);
@@ -93,19 +97,33 @@ long xdp_switch(struct xdp_md *ctx)
 	__builtin_memcpy(dest_mac_addr.mac, eth->h_dest,
 			 ETH_ALEN); // Changed from h_source to h_dest
 
-	bpf_printk("id = %llx, lookup mac_table for matching redirect iface, MAC: %02x:%02x:%02x:%02x:%02x:%02x\n",
+	bpf_printk("id = %llx, lookup mac_table for matching redirect iface, MAC: %02x:%02x:%02x\n",
 		   current_time,
 		   eth->h_dest[0],
 		   eth->h_dest[1],
-		   eth->h_dest[2],
-		   eth->h_dest[3],
-		   eth->h_dest[4],
-		   eth->h_dest[5]);
+		   eth->h_dest[2]);
 
 	struct iface_index *iface_to_redirect = bpf_map_lookup_elem(&mac_table, &dest_mac_addr);
 
-	if (!iface_to_redirect)
+	if (!iface_to_redirect) {
+		if (eth->h_dest[0] == 0xff &&
+		    eth->h_dest[1] == 0xff &&
+		    eth->h_dest[2] == 0xff &&
+		    eth->h_dest[3] == 0xff &&
+		    eth->h_dest[4] == 0xff &&
+		    eth->h_dest[5] == 0xff) {
+			bpf_printk("id = %llx, in case eth-h_dest==ff:ff:ff:ff:ff:ff we should do unknown unicast flooding\n", current_time);
+			// in this case we need to redirect to interfaces that is not equal to ctx->ingress_ifindex
+			// the problem is that this program would work if the switch have 2 interfaces not more,
+			// because in this type of XDP program we cannot redirect a packet to two interfaces.
+			for (int i = 0; i < switch_interfaces_count; i++) {
+				if (switch_interfaces[i] != ctx->ingress_ifindex) {
+					return bpf_clone_redirect(ctx, switch_interfaces[i], 0);
+				}
+			}
+		}
 		return XDP_PASS; // If the destination MAC isn't found, simply pass the packet
+	}
 
 	bpf_printk("id = %llx, match found. do the redirection\n", current_time);
 	return bpf_redirect(iface_to_redirect->interface_index, 0);
