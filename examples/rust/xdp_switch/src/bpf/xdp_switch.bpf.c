@@ -121,7 +121,7 @@ long xdp_switch(struct xdp_md *ctx)
 			// because in this type of XDP program we cannot redirect a packet to two interfaces.
 			for (int i = 0; i < switch_interfaces_count; i++) {
 				if (switch_interfaces[i] != ctx->ingress_ifindex) {
-					return bpf_clone_redirect(ctx, switch_interfaces[i], 0);
+					return bpf_redirect(switch_interfaces[i], 0);
 				}
 			}
 		}
