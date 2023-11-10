@@ -211,14 +211,14 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     })?;
 
     // let user_mac_table_clone_3 = Arc::clone(&user_mac_table);
-    // while running.load(Ordering::SeqCst) {
-    //     thread::sleep(time::Duration::from_secs(5));
-    //     println!("Content of the user_mac_table");
-    //     for (key, value) in user_mac_table_clone_3.as_ref().iter() {
-    //         // println!("the Key is {}, the value is {}", key.clone().as_ref(), value)
-    //         println!("the Key is {:?}, the value is {:?}, the last registered time is {:?}", key.mac ,value.interface_index, value.timestamp)
-    //     }
-    // }
+    while running.load(Ordering::SeqCst) {
+        thread::sleep(time::Duration::from_secs(5));
+        println!("Content of the user_mac_table");
+        // for (key, value) in user_mac_table_clone_3.as_ref().iter() {
+        //     // println!("the Key is {}, the value is {}", key.clone().as_ref(), value)
+        //     println!("the Key is {:?}, the value is {:?}, the last registered time is {:?}", key.mac ,value.interface_index, value.timestamp)
+        // }
+    }
 
     Ok(())
 }
