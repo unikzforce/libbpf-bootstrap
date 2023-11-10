@@ -24,9 +24,9 @@ mod xdp_switch;
 use xdp_switch::*;
 
 use chrono::Utc;
-use libbpf_rs::{Link, MapFlags};
+use libbpf_rs::{Link, Map, MapFlags};
 use moka::notification::RemovalCause;
-use unsafe_send_sync::UnsafeSend;
+use unsafe_send_sync::{UnsafeSend, UnsafeSendSync};
 
 const ETH_ALEN: usize = 6;
 
@@ -37,7 +37,7 @@ struct mac_address {
 }
 
 #[repr(C)]
-#[derive(Debug,  Clone)]
+#[derive(Debug, Clone)]
 struct iface_index {
     interface_index: u32,
     timestamp: u64,
@@ -78,7 +78,7 @@ struct Cli {
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let (sender, receiver): (Sender<mac_address_iface_entry>, Receiver<mac_address_iface_entry>) = unbounded();
+    // let (sender, receiver): (Sender<mac_address_iface_entry>, Receiver<mac_address_iface_entry>) = unbounded();
 
     let cli = Cli::parse();
 
@@ -106,110 +106,101 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             .collect()
     };
 
-    let skel_builder = XdpSwitchSkelBuilder::default();
-    let mut open_skel = skel_builder.open()?;
+    let first_interface = filtered_network_interfaces[0].index;
+    let second_interface = filtered_network_interfaces[1].index;
 
-    open_skel.bss().first_interface = filtered_network_interfaces[0].index;
-    open_skel.bss().second_interface = filtered_network_interfaces[1].index;
+    let tuples: Result<Vec<_>, Box<dyn std::error::Error>> = filtered_network_interfaces.iter().map(|iface| {
 
-    let skel = Arc::new(UnsafeSend::new(open_skel.load()?));
+        let skel_builder = XdpSwitchSkelBuilder::default();
 
-    let skel_for_eviction_clone = Arc::clone(&skel);
-    let eviction_listener = move |k: Arc<mac_address>, v: iface_index, _: RemovalCause| {
-        let maps = skel_for_eviction_clone.as_ref().maps();
-        let kernel_mac_table = maps.mac_table();
-        let existing_kernel_entry = kernel_mac_table.lookup(&k.mac, MapFlags::ANY);
+        let mut open_skel = skel_builder.open()?;
 
-        match existing_kernel_entry {
-            Ok(Some(data)) => {
-                // The data is available, now we can try to convert it to iface_index struct
-                if data.len() == std::mem::size_of::<iface_index>() {
-                    let iface_index_data = unsafe { &*(data.as_ptr() as *const iface_index) };
+        open_skel.bss().first_interface = first_interface;
+        open_skel.bss().second_interface = second_interface;
 
-                    let timestamp_seconds = iface_index_data.timestamp / 1_000_000_000; // Convert timestamp to seconds
+        let mut loaded_skel = open_skel.load()?;
 
-                    let current_time = Utc::now().timestamp();
-                    let time_difference = current_time - timestamp_seconds as i64;
-
-                    if time_difference < 30 {
-                        sender.send(mac_address_iface_entry {
-                            mac: *k.clone().as_ref(),
-                            iface: v.clone(),
-                        }).expect("oeuoeu");
-                    } else {
-                        let _ = kernel_mac_table.delete(&k.mac);
-                    }
-                } else {
-                    eprintln!("Invalid data size for iface_index");
-                }
-            }
-            Ok(None) => {
-                println!("No entry found for the given MAC address");
-            }
-            Err(err) => {
-                eprintln!("Error while looking up the MAC address: {:?}", err);
-            }
-        }
-    };
-
-    let user_mac_table: Arc<UnsafeSend<Cache<mac_address, iface_index>>> = Arc::new(
-        UnsafeSend::new(
-            Cache::builder()
-                .eviction_listener(eviction_listener)
-                .time_to_live(Duration::from_secs(30))
-                .build(),
-        )
-    );
-
-    let user_mac_table_clone = Arc::clone(&user_mac_table);
-    let _receiver_thread = thread::spawn(move || {
-        while let Ok(item) = receiver.recv() {
-            let _ = user_mac_table_clone.as_ref().insert(item.mac, item.iface);
-        }
-    });
-
-
-    let skel_for_attach_clone = Arc::clone(&skel);
-    let links: Arc<Mutex<Vec<Link>>> = Arc::new(Mutex::new(Vec::new()));
-    let cloned_links = Arc::clone(&links);
-    filtered_network_interfaces.iter().try_for_each(move |iface| -> Result<(), Box<dyn std::error::Error>> {
         // if let Some(skel_for_attach_inner) = Arc::get_mut(&mut skel_for_attach_clone) {
-        let skel_mut_ref: &mut UnsafeSend<XdpSwitchSkel> = unsafe {
-            &mut *(Arc::as_ptr(&skel_for_attach_clone) as *mut _)
-        };
-        println!("trying to attach to network card {:?}", iface.name);
-        let _link = skel_mut_ref.progs_mut().xdp_switch().attach_xdp(iface.index as i32)?;
-
-        let mut links_guard = cloned_links.lock().unwrap();
-        links_guard.push(_link);
-
-        // skel_mut_ref.links = XdpSwitchLinks {
-        //     xdp_switch: Some(_link)
+        // let skel_mut_ref: &mut UnsafeSend<XdpSwitchSkel> = unsafe {
+        //     &mut *(Arc::as_ptr(&skel_for_attach_clone) as *mut _)
         // };
+        println!("trying to attach to network card {:?}", iface.name);
+        let _link = loaded_skel.progs_mut().xdp_switch().attach_xdp(iface.index as i32)?;
 
         println!("successful attachment to network card {:?}", iface.name);
-        // } else {
-        //     eprintln!("Failed to obtain mutable reference to skel");
-        // }
-        Ok(())
-    })?;
 
-    let links_guard = links.lock().unwrap();
-    for link in &*links_guard {
-        println!("link {:?}", link)
-    }
+        // let kernel_mac_table = loaded_skel.maps().mac_table();
+        // let new_discovered_entries_rb = loaded_skel.maps().new_discovered_entries_rb();
 
-    let mut builder = libbpf_rs::RingBufferBuilder::new();
-    let skel_for_new_discoveries_clone = Arc::clone(&skel);
+        Ok((_link))
+    }).collect();
 
-    let maps = skel_for_new_discoveries_clone.as_ref().maps();
+    // let kernel_mac_table = tuples.unwrap()[0].1;
+    // let new_discovered_entries_rb = tuples.unwrap()[0].2;
+    //
+    // let kernel_mac_table_safe_sync = Arc::new(UnsafeSendSync::new(kernel_mac_table));
+    //
+    // let kernel_mac_table_safe_sync_clone = Arc::clone(&kernel_mac_table_safe_sync);
+    // let eviction_listener = move |k: Arc<mac_address>, v: iface_index, _: RemovalCause| {
+    //     let existing_kernel_entry = kernel_mac_table_safe_sync_clone.unwrap().lookup(&k.mac, MapFlags::ANY);
+    //
+    //     match existing_kernel_entry {
+    //         Ok(Some(data)) => {
+    //             // The data is available, now we can try to convert it to iface_index struct
+    //             if data.len() == std::mem::size_of::<iface_index>() {
+    //                 let iface_index_data = unsafe { &*(data.as_ptr() as *const iface_index) };
+    //
+    //                 let timestamp_seconds = iface_index_data.timestamp / 1_000_000_000; // Convert timestamp to seconds
+    //
+    //                 let current_time = Utc::now().timestamp();
+    //                 let time_difference = current_time - timestamp_seconds as i64;
+    //
+    //                 if time_difference < 30 {
+    //                     sender.send(mac_address_iface_entry {
+    //                         mac: *k.clone().as_ref(),
+    //                         iface: v.clone(),
+    //                     }).expect("oeuoeu");
+    //                 } else {
+    //                     let _ = kernel_mac_table_safe_sync_clone.unwrap().delete(&k.mac);
+    //                 }
+    //             } else {
+    //                 eprintln!("Invalid data size for iface_index");
+    //             }
+    //         }
+    //         Ok(None) => {
+    //             println!("No entry found for the given MAC address");
+    //         }
+    //         Err(err) => {
+    //             eprintln!("Error while looking up the MAC address: {:?}", err);
+    //         }
+    //     }
+    // };
+    //
+    // let user_mac_table: Arc<UnsafeSend<Cache<mac_address, iface_index>>> = Arc::new(
+    //     UnsafeSend::new(
+    //         Cache::builder()
+    //             .eviction_listener(eviction_listener)
+    //             .time_to_live(Duration::from_secs(30))
+    //             .build(),
+    //     )
+    // );
 
-    let user_mac_table_clone_2 = Arc::clone(&user_mac_table);
-    builder
-        .add(maps.new_discovered_entries_rb(), move |data| {
-            new_discovered_entry_handler(data, user_mac_table_clone_2.as_ref().clone().unwrap())
-        })
-        .unwrap();
+    // let user_mac_table_clone = Arc::clone(&user_mac_table);
+    // let _receiver_thread = thread::spawn(move || {
+    //     while let Ok(item) = receiver.recv() {
+    //         let _ = user_mac_table_clone.as_ref().insert(item.mac, item.iface);
+    //     }
+    // });
+
+
+    // let mut builder = libbpf_rs::RingBufferBuilder::new();
+    //
+    // let user_mac_table_clone_2 = Arc::clone(&user_mac_table);
+    // builder
+    //     .add(new_discovered_entries_rb, move |data| {
+    //         new_discovered_entry_handler(data, user_mac_table_clone_2.as_ref().clone().unwrap())
+    //     })
+    //     .unwrap();
 
 
 
@@ -219,15 +210,15 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         r.store(false, Ordering::SeqCst);
     })?;
 
-    let user_mac_table_clone_3 = Arc::clone(&user_mac_table);
-    while running.load(Ordering::SeqCst) {
-        thread::sleep(time::Duration::from_secs(5));
-        println!("Content of the user_mac_table");
-        for (key, value) in user_mac_table_clone_3.as_ref().iter() {
-            // println!("the Key is {}, the value is {}", key.clone().as_ref(), value)
-            println!("the Key is {:?}, the value is {:?}, the last registered time is {:?}", key.mac ,value.interface_index, value.timestamp)
-        }
-    }
+    // let user_mac_table_clone_3 = Arc::clone(&user_mac_table);
+    // while running.load(Ordering::SeqCst) {
+    //     thread::sleep(time::Duration::from_secs(5));
+    //     println!("Content of the user_mac_table");
+    //     for (key, value) in user_mac_table_clone_3.as_ref().iter() {
+    //         // println!("the Key is {}, the value is {}", key.clone().as_ref(), value)
+    //         println!("the Key is {:?}, the value is {:?}, the last registered time is {:?}", key.mac ,value.interface_index, value.timestamp)
+    //     }
+    // }
 
     Ok(())
 }
