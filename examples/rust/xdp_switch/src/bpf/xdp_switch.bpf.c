@@ -19,11 +19,13 @@ struct {
 	__uint(value_size, sizeof(struct iface_index));
 	__uint(max_entries, 256 * 1024);
 	__uint(map_flags, BPF_F_NO_PREALLOC);
+	__uint(pinning, LIBBPF_PIN_BY_NAME);
 } mac_table SEC(".maps") __weak;
 
 struct {
 	__uint(type, BPF_MAP_TYPE_RINGBUF);
 	__uint(max_entries, 256 * 1024);
+	__uint(pinning, LIBBPF_PIN_BY_NAME);
 } new_discovered_entries_rb SEC(".maps") __weak;
 
 void register_source_mac_address_if_required(const struct xdp_md *ctx, const struct ethhdr *eth,
