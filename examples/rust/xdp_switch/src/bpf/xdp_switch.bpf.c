@@ -93,11 +93,38 @@ long xdp_switch(struct xdp_md *ctx)
 	if ((void *)(eth + 1) > (void *)(long)ctx->data_end)
 		return XDP_ABORTED;
 
+	bpf_printk("id = %llx, Packet received, source MAC: %02x:%02x:%02x:%02x:%02x:%02x\n",
+		   current_time,
+		   eth->h_source[0],
+		   eth->h_source[1],
+		   eth->h_source[2],
+		   eth->h_source[3],
+		   eth->h_source[4],
+		   eth->h_source[5]);
+
+	bpf_printk("id = %llx, Packet received, dest MAC: %02x:%02x:%02x:%02x:%02x:%02x\n",
+		   current_time,
+		   eth->h_dest[0],
+		   eth->h_dest[1],
+		   eth->h_dest[2],
+		   eth->h_dest[3],
+		   eth->h_dest[4],
+		   eth->h_dest[5]);
+
 	register_source_mac_address_if_required(ctx, eth, current_time);
 
 	struct mac_address dest_mac_addr;
 	__builtin_memcpy(dest_mac_addr.mac, eth->h_dest,
 			 ETH_ALEN); // Changed from h_source to h_dest
+
+	bpf_printk("id = %llx, lookup mac_table for matching redirect iface, MAC: %02x:%02x:%02x:%02x:%02x:%02x\n",
+		   current_time,
+		   eth->h_source[0],
+		   eth->h_source[1],
+		   eth->h_source[2],
+		   eth->h_source[3],
+		   eth->h_source[4],
+		   eth->h_source[5]);
 
 	bpf_printk("id = %llx, lookup mac_table for matching redirect iface, MAC: %02x:%02x:%02x:%02x:%02x:%02x\n",
 		   current_time,
