@@ -93,6 +93,18 @@ long xdp_switch(struct xdp_md *ctx)
 	if ((void *)(eth + 1) > (void *)(long)ctx->data_end)
 		return XDP_ABORTED;
 
+	if (ctx->ingress_ifindex != first_interface) {
+		bpf_printk("id = %llx, interface = %d, redirecting to interface %d \n", current_time, ctx->ingress_ifindex, first_interface);
+		return bpf_redirect(first_interface, 0);
+	}
+	else if (ctx->ingress_ifindex != second_interface) {
+		bpf_printk("id = %llx, interface = %d, redirecting to interface %d \n", current_time, ctx->ingress_ifindex, second_interface);
+		return bpf_redirect(second_interface, 0);
+	} else {
+		bpf_printk("id = %llx, interface = %d, nothing has been found so will do XDP_PASS\n", current_time, ctx->ingress_ifindex);
+		return XDP_PASS; // If the destination MAC isn't found, simply pass the packet
+	}
+
 	bpf_printk("id = %llx, interface = %d, Packet received, source MAC: %02x:%02x:%02x:%02x:%02x:%02x\n",
 		   current_time,
 		   ctx->ingress_ifindex,
