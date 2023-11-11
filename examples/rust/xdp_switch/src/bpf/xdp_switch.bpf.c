@@ -86,7 +86,6 @@ long xdp_switch(struct xdp_md *ctx)
 	// we can use current_time as something like a unique identifier for packet
 	__u64 current_time = bpf_ktime_get_ns();
 
-	bpf_printk("id = %llx, interface = %d, Packet received\n", current_time, ctx->ingress_ifindex);
 	struct ethhdr *eth = (void *)(long)ctx->data;
 
 	// Additional check after the adjustment
