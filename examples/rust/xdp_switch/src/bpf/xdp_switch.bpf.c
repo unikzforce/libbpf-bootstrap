@@ -140,9 +140,11 @@ long xdp_switch(struct xdp_md *ctx)
 			// the problem is that this program would work if the switch have 2 interfaces not more,
 			// because in this type of XDP program we cannot redirect a packet to two interfaces.
 			if (ctx->ingress_ifindex != first_interface) {
+				bpf_printk("id = %llx, redirecting to interface %d \n", current_time, first_interface);
 				return bpf_redirect(first_interface, 0);
 			}
 			if (ctx->ingress_ifindex != second_interface) {
+				bpf_printk("id = %llx, redirecting to interface %d \n", current_time, second_interface);
 				return bpf_redirect(second_interface, 0);
 			}
 		}
