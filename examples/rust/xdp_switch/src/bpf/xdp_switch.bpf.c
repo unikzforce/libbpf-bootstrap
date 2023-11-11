@@ -31,22 +31,22 @@ struct {
 void register_source_mac_address_if_required(const struct xdp_md *ctx, const struct ethhdr *eth,
 					     __u64 current_time)
 {
-	bpf_printk("id = %llx, learning-process: register source mac address if required\n",
-		   current_time);
+	bpf_printk("id = %llx, interface = %d, learning-process: register source mac address if required\n",
+		   current_time, ctx->ingress_ifindex);
 	struct mac_address source_mac_addr;
 	__builtin_memcpy(source_mac_addr.mac, eth->h_source, ETH_ALEN);
 
 	bpf_printk(
-		"id = %llx, learning-process: check if we already have registered source mac address \n",
-		current_time);
+		"id = %llx, interface = %d, learning-process: check if we already have registered source mac address \n",
+		current_time, ctx->ingress_ifindex);
 
 	struct iface_index *iface_for_source_mac =
 		bpf_map_lookup_elem(&mac_table, &source_mac_addr);
 
 	if (!iface_for_source_mac) {
 		bpf_printk(
-			"id = %llx, learning-process: have NOT Found an already registered entry for source mac address \n",
-			current_time);
+			"id = %llx, interface = %d, learning-process: have NOT Found an already registered entry for source mac address \n",
+			current_time, ctx->ingress_ifindex);
 
 		struct mac_address_iface_entry new_entry = {
 			.mac = { .mac = { 0xAA, 0xBB, 0xCC, 0xDD, 0xEE, 0xFF } },
@@ -61,20 +61,20 @@ void register_source_mac_address_if_required(const struct xdp_md *ctx, const str
 		new_entry.iface.timestamp = current_time;
 
 		bpf_printk(
-			"id = %llx, learning-process: have NOT found + trying to update mac_table map\n",
-			current_time);
+			"id = %llx, interface = %d, learning-process: have NOT found + trying to update mac_table map\n",
+			current_time, ctx->ingress_ifindex);
 
 		bpf_map_update_elem(&mac_table, &(new_entry.mac), &(new_entry.iface), BPF_ANY);
 		//		bpf_ringbuf_submit(new_entry, 0);
 
 		bpf_printk(
-			"id = %llx, learning-process: have NOT found + trying to submit data to new_discovered map\n",
-			current_time);
+			"id = %llx, interface = %d, learning-process: have NOT found + trying to submit data to new_discovered map\n",
+			current_time, ctx->ingress_ifindex);
 		bpf_ringbuf_output(&new_discovered_entries_rb, &new_entry, sizeof(new_entry), 0);
 	} else {
 		bpf_printk(
-			"id = %llx, learning-process: have Found an already registered entry for source mac address \n",
-			current_time);
+			"id = %llx, interface = %d, learning-process: have Found an already registered entry for source mac address \n",
+			current_time, ctx->ingress_ifindex);
 		iface_for_source_mac->timestamp = current_time;
 		bpf_map_update_elem(&mac_table, &source_mac_addr, iface_for_source_mac, BPF_ANY);
 	}
@@ -86,7 +86,7 @@ long xdp_switch(struct xdp_md *ctx)
 	// we can use current_time as something like a unique identifier for packet
 	__u64 current_time = bpf_ktime_get_ns();
 
-	bpf_printk("id = %llx, Packet received\n", current_time);
+	bpf_printk("id = %llx, interface = %d, Packet received\n", current_time, ctx->ingress_ifindex);
 	struct ethhdr *eth = (void *)(long)ctx->data;
 
 	// Additional check after the adjustment
