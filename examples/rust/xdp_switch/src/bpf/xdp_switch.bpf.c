@@ -117,16 +117,7 @@ long xdp_switch(struct xdp_md *ctx)
 	__builtin_memcpy(dest_mac_addr.mac, eth->h_dest,
 			 ETH_ALEN); // Changed from h_source to h_dest
 
-	bpf_printk("id = %llx, lookup mac_table for matching redirect iface, MAC: %02x:%02x:%02x:%02x:%02x:%02x\n",
-		   current_time,
-		   eth->h_source[0],
-		   eth->h_source[1],
-		   eth->h_source[2],
-		   eth->h_source[3],
-		   eth->h_source[4],
-		   eth->h_source[5]);
-
-	bpf_printk("id = %llx, lookup mac_table for matching redirect iface, MAC: %02x:%02x:%02x:%02x:%02x:%02x\n",
+	bpf_printk("id = %llx, lookup mac_table for matching redirect iface, h_dest MAC: %02x:%02x:%02x:%02x:%02x:%02x\n",
 		   current_time,
 		   eth->h_dest[0],
 		   eth->h_dest[1],
