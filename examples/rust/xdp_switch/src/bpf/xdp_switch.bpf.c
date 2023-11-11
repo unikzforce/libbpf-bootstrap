@@ -83,6 +83,7 @@ void register_source_mac_address_if_required(const struct xdp_md *ctx, const str
 SEC("xdp")
 long xdp_switch(struct xdp_md *ctx)
 {
+	bpf_printk("----------------------------------------------------------------------------------------------------");
 	// we can use current_time as something like a unique identifier for packet
 	__u64 current_time = bpf_ktime_get_ns();
 
