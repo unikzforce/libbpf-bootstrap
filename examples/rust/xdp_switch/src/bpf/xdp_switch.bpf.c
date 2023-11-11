@@ -93,8 +93,9 @@ long xdp_switch(struct xdp_md *ctx)
 	if ((void *)(eth + 1) > (void *)(long)ctx->data_end)
 		return XDP_ABORTED;
 
-	bpf_printk("id = %llx, Packet received, source MAC: %02x:%02x:%02x:%02x:%02x:%02x\n",
+	bpf_printk("id = %llx, interface = %d, Packet received, source MAC: %02x:%02x:%02x:%02x:%02x:%02x\n",
 		   current_time,
+		   ctx->ingress_ifindex,
 		   eth->h_source[0],
 		   eth->h_source[1],
 		   eth->h_source[2],
@@ -102,8 +103,9 @@ long xdp_switch(struct xdp_md *ctx)
 		   eth->h_source[4],
 		   eth->h_source[5]);
 
-	bpf_printk("id = %llx, Packet received, dest MAC: %02x:%02x:%02x:%02x:%02x:%02x\n",
+	bpf_printk("id = %llx, interface = %d, Packet received, dest MAC: %02x:%02x:%02x:%02x:%02x:%02x\n",
 		   current_time,
+		   ctx->ingress_ifindex,
 		   eth->h_dest[0],
 		   eth->h_dest[1],
 		   eth->h_dest[2],
@@ -117,8 +119,9 @@ long xdp_switch(struct xdp_md *ctx)
 	__builtin_memcpy(dest_mac_addr.mac, eth->h_dest,
 			 ETH_ALEN); // Changed from h_source to h_dest
 
-	bpf_printk("id = %llx, lookup mac_table for matching redirect iface, h_dest MAC: %02x:%02x:%02x:%02x:%02x:%02x\n",
+	bpf_printk("id = %llx, interface = %d, lookup mac_table for matching redirect iface, h_dest MAC: %02x:%02x:%02x:%02x:%02x:%02x\n",
 		   current_time,
+		   ctx->ingress_ifindex,
 		   eth->h_dest[0],
 		   eth->h_dest[1],
 		   eth->h_dest[2],
@@ -135,23 +138,23 @@ long xdp_switch(struct xdp_md *ctx)
 		    eth->h_dest[3] == 0xff &&
 		    eth->h_dest[4] == 0xff &&
 		    eth->h_dest[5] == 0xff) {
-			bpf_printk("id = %llx, in case eth-h_dest==ff:ff:ff:ff:ff:ff we should do unknown unicast flooding\n", current_time);
+			bpf_printk("id = %llx, interface = %d, in case eth-h_dest==ff:ff:ff:ff:ff:ff we should do unknown unicast flooding\n", current_time, ctx->ingress_ifindex);
 			// in this case we need to redirect to interfaces that is not equal to ctx->ingress_ifindex
 			// the problem is that this program would work if the switch have 2 interfaces not more,
 			// because in this type of XDP program we cannot redirect a packet to two interfaces.
 			if (ctx->ingress_ifindex != first_interface) {
-				bpf_printk("id = %llx, redirecting to interface %d \n", current_time, first_interface);
+				bpf_printk("id = %llx, interface = %d, redirecting to interface %d \n", current_time, first_interface, ctx->ingress_ifindex);
 				return bpf_redirect(first_interface, 0);
 			}
 			if (ctx->ingress_ifindex != second_interface) {
-				bpf_printk("id = %llx, redirecting to interface %d \n", current_time, second_interface);
+				bpf_printk("id = %llx, interface = %d, redirecting to interface %d \n", current_time, second_interface, ctx->ingress_ifindex);
 				return bpf_redirect(second_interface, 0);
 			}
 		}
-		bpf_printk("id = %llx, nothing has been found so will do XDP_PASS\n", current_time);
+		bpf_printk("id = %llx, interface = %d, nothing has been found so will do XDP_PASS\n", current_time, ctx->ingress_ifindex);
 		return XDP_PASS; // If the destination MAC isn't found, simply pass the packet
 	}
 
-	bpf_printk("id = %llx, match found. do the redirection\n", current_time);
+	bpf_printk("id = %llx, interface = %d, match found. do the redirection\n", current_time, ctx->ingress_ifindex);
 	return bpf_redirect(iface_to_redirect->interface_index, 0);
 }
