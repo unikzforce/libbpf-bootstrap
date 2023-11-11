@@ -146,6 +146,7 @@ long xdp_switch(struct xdp_md *ctx)
 				return bpf_redirect(second_interface, 0);
 			}
 		}
+		bpf_printk("id = %llx, nothing has been found so will do XDP_PASS\n", current_time);
 		return XDP_PASS; // If the destination MAC isn't found, simply pass the packet
 	}
 
