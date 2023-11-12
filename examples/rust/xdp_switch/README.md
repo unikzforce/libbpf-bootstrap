@@ -18,6 +18,14 @@ so in vmware configurations for both segments:
 - Forged transmits --> tick override --> ACCEPT
 
 
+the current problem that is needed to be solved:
+
+using normal XDP program i cannot redirect a single packet to multiple network ports on the switch,
+so currently this switch is just working like a bridge. we probably should switch to AF_XDP to be able
+to copy packet multiple times to implement `Unknown Unicast Flooding`. maybe it would be much easier to 
+implement that via golang --> see here: https://pkg.go.dev/gvisor.dev/gvisor/pkg/xdp + https://github.com/google/gvisor
+
+
 compile:
 ```
 cd examples/rust/xdp_switch
