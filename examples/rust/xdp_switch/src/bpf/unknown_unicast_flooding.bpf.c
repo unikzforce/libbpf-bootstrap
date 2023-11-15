@@ -16,6 +16,10 @@ long unknown_unicast_flooding(struct __sk_buff *skb)
 
 	int ingress_ifindex = skb->ingress_ifindex;
 
+	if (number_of_interfaces >= 19) {
+		return BPF_DROP;
+	}
+
 	for (unsigned int iface_index = 0; iface_index < number_of_interfaces; iface_index++) {
 		if (interfaces[iface_index] != ingress_ifindex) {
 			bpf_clone_redirect(skb, interfaces[iface_index], 0);
