@@ -7,10 +7,6 @@
 
 char LICENSE[] SEC("license") = "Dual BSD/GPL";
 
-
-__u32 first_interface = 0;
-__u32 second_interface = 0;
-
 struct {
 	__uint(type, BPF_MAP_TYPE_HASH);
 	__type(key, struct mac_address);
@@ -83,7 +79,8 @@ void register_source_mac_address_if_required(const struct xdp_md *ctx, const str
 SEC("xdp")
 long xdp_switch(struct xdp_md *ctx)
 {
-	bpf_printk("----------------------------------------------------------------------------------------------------");
+	bpf_printk(
+		"----------------------------------------------------------------------------------------------------");
 	// we can use current_time as something like a unique identifier for packet
 	__u64 current_time = bpf_ktime_get_ns();
 
@@ -93,25 +90,15 @@ long xdp_switch(struct xdp_md *ctx)
 	if ((void *)(eth + 1) > (void *)(long)ctx->data_end)
 		return XDP_ABORTED;
 
-	bpf_printk("id = %llx, interface = %d, Packet received, source MAC: %02x:%02x:%02x:%02x:%02x:%02x\n",
-		   current_time,
-		   ctx->ingress_ifindex,
-		   eth->h_source[0],
-		   eth->h_source[1],
-		   eth->h_source[2],
-		   eth->h_source[3],
-		   eth->h_source[4],
-		   eth->h_source[5]);
+	bpf_printk(
+		"id = %llx, interface = %d, Packet received, source MAC: %02x:%02x:%02x:%02x:%02x:%02x\n",
+		current_time, ctx->ingress_ifindex, eth->h_source[0], eth->h_source[1],
+		eth->h_source[2], eth->h_source[3], eth->h_source[4], eth->h_source[5]);
 
-	bpf_printk("id = %llx, interface = %d, Packet received, dest MAC: %02x:%02x:%02x:%02x:%02x:%02x\n",
-		   current_time,
-		   ctx->ingress_ifindex,
-		   eth->h_dest[0],
-		   eth->h_dest[1],
-		   eth->h_dest[2],
-		   eth->h_dest[3],
-		   eth->h_dest[4],
-		   eth->h_dest[5]);
+	bpf_printk(
+		"id = %llx, interface = %d, Packet received, dest MAC: %02x:%02x:%02x:%02x:%02x:%02x\n",
+		current_time, ctx->ingress_ifindex, eth->h_dest[0], eth->h_dest[1], eth->h_dest[2],
+		eth->h_dest[3], eth->h_dest[4], eth->h_dest[5]);
 
 	register_source_mac_address_if_required(ctx, eth, current_time);
 
@@ -119,43 +106,42 @@ long xdp_switch(struct xdp_md *ctx)
 	__builtin_memcpy(dest_mac_addr.mac, eth->h_dest,
 			 ETH_ALEN); // Changed from h_source to h_dest
 
-	bpf_printk("id = %llx, interface = %d, lookup mac_table for matching redirect iface, h_dest MAC: %02x:%02x:%02x:%02x:%02x:%02x\n",
-		   current_time,
-		   ctx->ingress_ifindex,
-		   eth->h_dest[0],
-		   eth->h_dest[1],
-		   eth->h_dest[2],
-		   eth->h_dest[3],
-		   eth->h_dest[4],
-		   eth->h_dest[5]);
+	bpf_printk(
+		"id = %llx, interface = %d, lookup mac_table for matching redirect iface, h_dest MAC: %02x:%02x:%02x:%02x:%02x:%02x\n",
+		current_time, ctx->ingress_ifindex, eth->h_dest[0], eth->h_dest[1], eth->h_dest[2],
+		eth->h_dest[3], eth->h_dest[4], eth->h_dest[5]);
 
 	struct iface_index *iface_to_redirect = bpf_map_lookup_elem(&mac_table, &dest_mac_addr);
 
 	if (!iface_to_redirect) {
-//		if (eth->h_dest[0] == 0xff &&
-//		    eth->h_dest[1] == 0xff &&
-//		    eth->h_dest[2] == 0xff &&
-//		    eth->h_dest[3] == 0xff &&
-//		    eth->h_dest[4] == 0xff &&
-//		    eth->h_dest[5] == 0xff) {
-		bpf_printk("id = %llx, interface = %d, in case eth-h_dest==ff:ff:ff:ff:ff:ff we should do unknown unicast flooding\n", current_time, ctx->ingress_ifindex);
-		// in this case we need to redirect to interfaces that is not equal to ctx->ingress_ifindex
-		// the problem is that this program would work if the switch have 2 interfaces not more,
-		// because in this type of XDP program we cannot redirect a packet to two interfaces.
-		if (ctx->ingress_ifindex != first_interface) {
-			bpf_printk("id = %llx, interface = %d, redirecting to interface %d \n", current_time, ctx->ingress_ifindex, first_interface);
-			return bpf_redirect(first_interface, 0);
-		}
-		else if (ctx->ingress_ifindex != second_interface) {
-			bpf_printk("id = %llx, interface = %d, redirecting to interface %d \n", current_time, ctx->ingress_ifindex, second_interface);
-			return bpf_redirect(second_interface, 0);
-		} else {
-			bpf_printk("id = %llx, interface = %d, nothing has been found so will do XDP_PASS\n", current_time, ctx->ingress_ifindex);
-			return XDP_PASS; // If the destination MAC isn't found, simply pass the packet
-		}
-//		}
+		bpf_printk(
+			"id = %llx, interface = %d, in case eth-h_dest==ff:ff:ff:ff:ff:ff we should do unknown unicast flooding\n",
+			current_time, ctx->ingress_ifindex);
+		// Unknown Unicast Flooding:
+		// in this case we need to redirect to interfaces that is not equal to ctx->ingress_ifindex,
+		// but normal xdp program at this layer can only redirect a network packet to a single interface,
+		// So we should pass it to upper layer. another ebpf program at TC layer should handle redirection.
+		// cause in TC layer we can clone a packet and redirect it to more than one network interface.
+		return XDP_PASS;
+
+		// TODO: check if the number of network interfaces was just 2 then we don't need TC for UNKNOWN UNICAST FLOODING
+		// TODO: because in this case we would only need to redirect to one other network interface, so we can handle redirection
+		// TODO: just here
+
+		//		if (ctx->ingress_ifindex != first_interface) {
+		//			bpf_printk("id = %llx, interface = %d, redirecting to interface %d \n", current_time, ctx->ingress_ifindex, first_interface);
+		//			return bpf_redirect(first_interface, 0);
+		//		}
+		//		else if (ctx->ingress_ifindex != second_interface) {
+		//			bpf_printk("id = %llx, interface = %d, redirecting to interface %d \n", current_time, ctx->ingress_ifindex, second_interface);
+		//			return bpf_redirect(second_interface, 0);
+		//		} else {
+		//			bpf_printk("id = %llx, interface = %d, nothing has been found so will do XDP_PASS\n", current_time, ctx->ingress_ifindex);
+		//			return XDP_PASS; // If the destination MAC isn't found, simply pass the packet
+		//		}
 	}
 
-	bpf_printk("id = %llx, interface = %d, match found. do the redirection\n", current_time, ctx->ingress_ifindex);
+	bpf_printk("id = %llx, interface = %d, match found. do the redirection\n", current_time,
+		   ctx->ingress_ifindex);
 	return bpf_redirect(iface_to_redirect->interface_index, 0);
 }

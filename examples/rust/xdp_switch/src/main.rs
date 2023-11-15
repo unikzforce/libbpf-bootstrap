@@ -1,8 +1,8 @@
 use std::sync::atomic::{AtomicBool, Ordering};
 
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 use std::mem;
-use std::{thread, time};
+use std::thread;
 use std::time::Duration;
 use network_interface::NetworkInterface;
 use network_interface::NetworkInterfaceConfig;
@@ -21,12 +21,16 @@ extern crate libbpf_rs;
 #[path = "bpf/.output/xdp_switch.skel.rs"]
 mod xdp_switch;
 
+#[path = "bpf/.output/unknown_unicast_flooding.skel.rs"]
+mod unknown_unicast_flooding;
+
 use xdp_switch::*;
 
 use chrono::Utc;
 use libbpf_rs::{Link, MapFlags};
 use moka::notification::RemovalCause;
 use unsafe_send_sync::UnsafeSend;
+use crate::unknown_unicast_flooding::{UnknownUnicastFloodingSkel, UnknownUnicastFloodingSkelBuilder};
 
 const ETH_ALEN: usize = 6;
 
@@ -106,24 +110,20 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             .collect()
     };
 
-    let skel_builder = XdpSwitchSkelBuilder::default();
-    let mut open_skel = skel_builder.open()?;
+    let xdp_switch_skel_builder = XdpSwitchSkelBuilder::default();
+    let xdp_switch_open_skel = xdp_switch_skel_builder.open()?;
+    let xdp_switch_open_skel_unsafe_send = Arc::new(UnsafeSend::new(xdp_switch_open_skel.load()?));
 
-    open_skel.bss().first_interface = filtered_network_interfaces[0].index;
-    open_skel.bss().second_interface = filtered_network_interfaces[1].index;
-
-    let skel = Arc::new(UnsafeSend::new(open_skel.load()?));
-
-    let skel_for_eviction_clone = Arc::clone(&skel);
+    let xdp_switch_open_skel_unsafe_send_for_eviction_clone = Arc::clone(&xdp_switch_open_skel_unsafe_send);
     let eviction_listener = move |k: Arc<mac_address>, v: iface_index, _: RemovalCause| {
-        let maps = skel_for_eviction_clone.as_ref().maps();
+        let maps = xdp_switch_open_skel_unsafe_send_for_eviction_clone.as_ref().maps();
         let kernel_mac_table = maps.mac_table();
         let existing_kernel_entry = kernel_mac_table.lookup(&k.mac, MapFlags::ANY);
 
         match existing_kernel_entry {
             Ok(Some(data)) => {
                 // The data is available, now we can try to convert it to iface_index struct
-                if data.len() == std::mem::size_of::<iface_index>() {
+                if data.len() == mem::size_of::<iface_index>() {
                     let iface_index_data = unsafe { &*(data.as_ptr() as *const iface_index) };
 
                     let timestamp_seconds = iface_index_data.timestamp / 1_000_000_000; // Convert timestamp to seconds
@@ -168,39 +168,46 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
     });
 
+    let network_interface_indices: Vec<u32> = filtered_network_interfaces
+        .iter()
+        .map(|iface| iface.index)
+        .collect();
+    let filtered_network_interfaces_count = filtered_network_interfaces.len();
 
-    let skel_for_attach_clone = Arc::clone(&skel);
-    let links: Arc<Mutex<Vec<Link>>> = Arc::new(Mutex::new(Vec::new()));
-    let cloned_links = Arc::clone(&links);
-    filtered_network_interfaces.iter().try_for_each(move |iface| -> Result<(), Box<dyn std::error::Error>> {
-        // if let Some(skel_for_attach_inner) = Arc::get_mut(&mut skel_for_attach_clone) {
-        let skel_mut_ref: &mut UnsafeSend<XdpSwitchSkel> = unsafe {
-            &mut *(Arc::as_ptr(&skel_for_attach_clone) as *mut _)
+    let unknown_unicast_flooding_skel_builder = UnknownUnicastFloodingSkelBuilder::default();
+    let unknown_unicast_flooding_open_skel = unknown_unicast_flooding_skel_builder.open()?;
+    let unknown_unicast_flooding_open_skel_unsafe_send = Arc::new(UnsafeSend::new(unknown_unicast_flooding_open_skel.load()?));
+
+    let xdp_switch_open_skel_unsafe_send_for_attach_clone = Arc::clone(&xdp_switch_open_skel_unsafe_send);
+    let unknown_unicast_flooding_open_skel_unsafe_send_for_attach_clone = Arc::clone(&unknown_unicast_flooding_open_skel_unsafe_send);
+
+    let result: Vec<(Link, Link)> = filtered_network_interfaces.iter().map(move |iface: &NetworkInterface| -> Result<(Link, Link), Box<dyn std::error::Error>> {
+        let xdp_switch_skel_mut_ref: &mut UnsafeSend<XdpSwitchSkel> = unsafe {
+            &mut *(Arc::as_ptr(&xdp_switch_open_skel_unsafe_send_for_attach_clone) as *mut _)
         };
+
+        let unknown_unicast_flooding_skel_mut_ref: &mut UnsafeSend<UnknownUnicastFloodingSkel> = unsafe {
+            &mut *(Arc::as_ptr(&unknown_unicast_flooding_open_skel_unsafe_send_for_attach_clone) as *mut _)
+        };
+
+        for i in 0..filtered_network_interfaces_count {
+            unknown_unicast_flooding_skel_mut_ref.bss().interfaces[i] = network_interface_indices[i];
+        }
+
         println!("trying to attach to network card {:?}", iface.name);
-        let _link = skel_mut_ref.progs_mut().xdp_switch().attach_xdp(iface.index as i32)?;
-
-        let mut links_guard = cloned_links.lock().unwrap();
-        links_guard.push(_link);
-
-        // skel_mut_ref.links = XdpSwitchLinks {
-        //     xdp_switch: Some(_link)
-        // };
+        let _xpd_switch_attachment_link = xdp_switch_skel_mut_ref.progs_mut().xdp_switch().attach_xdp(iface.index as i32)?;
+        let _unknown_unicast_flooding_attachment_link = unknown_unicast_flooding_skel_mut_ref.progs_mut().unknown_unicast_flooding().attach_xdp(iface.index as i32)?;
 
         println!("successful attachment to network card {:?}", iface.name);
-        // } else {
-        //     eprintln!("Failed to obtain mutable reference to skel");
-        // }
-        Ok(())
-    })?;
+        Ok((_xpd_switch_attachment_link, _unknown_unicast_flooding_attachment_link))
+    }).collect::<Result<Vec<(Link, Link)>, _>>()?;
 
-    let links_guard = links.lock().unwrap();
-    for link in &*links_guard {
-        println!("link {:?}", link)
+    for links_tuple in result {
+        println!("link {:?}", links_tuple);
     }
 
     let mut builder = libbpf_rs::RingBufferBuilder::new();
-    let skel_for_new_discoveries_clone = Arc::clone(&skel);
+    let skel_for_new_discoveries_clone = Arc::clone(&xdp_switch_open_skel_unsafe_send);
 
     let maps = skel_for_new_discoveries_clone.as_ref().maps();
 
@@ -221,7 +228,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let user_mac_table_clone_3 = Arc::clone(&user_mac_table);
     while running.load(Ordering::SeqCst) {
-        thread::sleep(time::Duration::from_secs(5));
+        thread::sleep(Duration::from_secs(5));
         println!("Content of the user_mac_table");
         for (key, value) in user_mac_table_clone_3.as_ref().iter() {
             // println!("the Key is {}, the value is {}", key.clone().as_ref(), value)
@@ -232,7 +239,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
-fn new_discovered_entry_handler(data: &[u8], user_mac_table: Cache<mac_address, iface_index>) -> ::std::os::raw::c_int {
+fn new_discovered_entry_handler(data: &[u8], user_mac_table: Cache<mac_address, iface_index>) -> std::os::raw::c_int {
     if data.len() != mem::size_of::<mac_address_iface_entry>() {
         eprintln!(
             "Invalid size {} != {}",
