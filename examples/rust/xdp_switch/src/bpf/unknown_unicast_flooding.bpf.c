@@ -27,6 +27,11 @@ long unknown_unicast_flooding(struct __sk_buff *skb)
 	}
 
 	for (unsigned int iface_index = 0; iface_index < number_of_interfaces; iface_index++) {
+
+		if (iface_index >= 20) {
+			break;
+		}
+
 		if (interfaces[iface_index] != ingress_ifindex) {
 			bpf_clone_redirect(skb, interfaces[iface_index], 0);
 		}
