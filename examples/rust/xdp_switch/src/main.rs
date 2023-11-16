@@ -2,6 +2,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 
 use std::sync::Arc;
 use std::mem;
+use std::os::fd::AsFd;
 use std::thread;
 use std::time::Duration;
 use network_interface::NetworkInterface;
@@ -27,7 +28,7 @@ mod unknown_unicast_flooding;
 use xdp_switch::*;
 
 use chrono::Utc;
-use libbpf_rs::{Link, MapFlags};
+use libbpf_rs::{Link, MapFlags, TC_CUSTOM, TC_EGRESS, TC_H_CLSACT, TC_H_MIN_INGRESS, TC_INGRESS, TcHook, TcHookBuilder};
 use moka::notification::RemovalCause;
 use unsafe_send_sync::UnsafeSend;
 use crate::unknown_unicast_flooding::{UnknownUnicastFloodingSkel, UnknownUnicastFloodingSkelBuilder};
@@ -176,12 +177,17 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let unknown_unicast_flooding_skel_builder = UnknownUnicastFloodingSkelBuilder::default();
     let unknown_unicast_flooding_open_skel = unknown_unicast_flooding_skel_builder.open()?;
-    let unknown_unicast_flooding_open_skel_unsafe_send = Arc::new(UnsafeSend::new(unknown_unicast_flooding_open_skel.load()?));
+    let unknown_unicast_flooding_open_skel_loaded_unsafe_send = Arc::new(UnsafeSend::new(unknown_unicast_flooding_open_skel.load()?));
+
+    let unknown_unicast_flooding_open_skel_unsafe_send_for_tc_hook_builder = Arc::clone(&unknown_unicast_flooding_open_skel_loaded_unsafe_send);
+    let unknown_unicast_flooding_prog = unknown_unicast_flooding_open_skel_unsafe_send_for_tc_hook_builder.as_ref().progs();
+    let mut tc_builder = TcHookBuilder::new(unknown_unicast_flooding_prog.unknown_unicast_flooding().as_fd());
 
     let xdp_switch_open_skel_unsafe_send_for_attach_clone = Arc::clone(&xdp_switch_open_skel_unsafe_send);
-    let unknown_unicast_flooding_open_skel_unsafe_send_for_attach_clone = Arc::clone(&unknown_unicast_flooding_open_skel_unsafe_send);
+    let unknown_unicast_flooding_open_skel_unsafe_send_for_attach_clone = Arc::clone(&unknown_unicast_flooding_open_skel_loaded_unsafe_send);
 
-    let result: Vec<(Link, Link)> = filtered_network_interfaces.iter().map(move |iface: &NetworkInterface| -> Result<(Link, Link), Box<dyn std::error::Error>> {
+
+    let result: Vec<(Link, TcHook)> = filtered_network_interfaces.iter().map(move |iface: &NetworkInterface| -> Result<(Link, TcHook), Box<dyn std::error::Error>> {
         let xdp_switch_skel_mut_ref: &mut UnsafeSend<XdpSwitchSkel> = unsafe {
             &mut *(Arc::as_ptr(&xdp_switch_open_skel_unsafe_send_for_attach_clone) as *mut _)
         };
@@ -196,11 +202,18 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
         println!("trying to attach to network card {:?}", iface.name);
         let _xpd_switch_attachment_link = xdp_switch_skel_mut_ref.progs_mut().xdp_switch().attach_xdp(iface.index as i32)?;
-        let _unknown_unicast_flooding_attachment_link = unknown_unicast_flooding_skel_mut_ref.progs_mut().unknown_unicast_flooding().attach_xdp(iface.index as i32)?;
+
+        tc_builder
+            .ifindex(iface.index as i32)
+            .replace(true)
+            .handle(1)
+            .priority(1);
+        let mut ingress = tc_builder.hook(TC_INGRESS);
+        let tc_hook = ingress.create()?;
 
         println!("successful attachment to network card {:?}", iface.name);
-        Ok((_xpd_switch_attachment_link, _unknown_unicast_flooding_attachment_link))
-    }).collect::<Result<Vec<(Link, Link)>, _>>()?;
+        Ok((_xpd_switch_attachment_link, tc_hook))
+    }).collect::<Result<Vec<(Link, TcHook)>, _>>()?;
 
     for links_tuple in result {
         println!("link {:?}", links_tuple);
