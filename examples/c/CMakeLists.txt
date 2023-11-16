@@ -6,9 +6,6 @@ project(examples)
 # Tell cmake where to find BpfObject module
 list(APPEND CMAKE_MODULE_PATH ${CMAKE_CURRENT_SOURCE_DIR}/../../tools/cmake)
 
-include_directories(SYSTEM ${CMAKE_CURRENT_SOURCE_DIR}/../../build)
-include_directories(SYSTEM ${CMAKE_CURRENT_SOURCE_DIR}/../../build/libbpf/)
-
 # Build vendored libbpf
 include(ExternalProject)
 ExternalProject_Add(libbpf
@@ -97,4 +94,3 @@ foreach(app ${apps})
       ${CMAKE_CURRENT_SOURCE_DIR}/../../blazesym/target/release/libblazesym.a -lpthread -lrt -ldl)
   endif()
 endforeach()
-

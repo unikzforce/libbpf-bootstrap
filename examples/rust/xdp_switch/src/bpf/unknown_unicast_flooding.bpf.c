@@ -1,6 +1,7 @@
 #include <linux/bpf.h>
 #include <linux/if_ether.h>
 #include <bpf/bpf_helpers.h>
+#include <linux/pkt_cls.h>
 
 
 char LICENSE[] SEC("license") = "Dual BSD/GPL";
@@ -15,7 +16,6 @@ int unknown_unicast_flooding(struct __sk_buff *skb)
 		"///////////////////////////////////////////////////////////////////////////////////////////////////");
 	// we can use current_time as something like a unique identifier for packet
 	__u64 current_time = bpf_ktime_get_ns();
-
 	struct ethhdr *eth = (void *)(long)skb->data;
 
 	if ((void *)(eth + 1) > (void *)(long)skb->data_end)
@@ -39,9 +39,10 @@ int unknown_unicast_flooding(struct __sk_buff *skb)
 
 		if (interfaces[iface_index] != ingress_ifindex) {
 			bpf_clone_redirect(skb, interfaces[iface_index], 0);
+			bpf_printk("///////////// id = %llx, redirecting to %d \n", current_time,
+				   interfaces[iface_index]);
 		}
 	}
 
-	return BPF_DROP;
-
+	return TC_ACT_OK;
 }
