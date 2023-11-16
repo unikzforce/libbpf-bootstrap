@@ -11,14 +11,20 @@ __u32 number_of_interfaces = 20 - 1;
 SEC("tc")
 int unknown_unicast_flooding(struct __sk_buff *skb)
 {
-
+	bpf_printk(
+		"///////////////////////////////////////////////////////////////////////////////////////////////////");
+	// we can use current_time as something like a unique identifier for packet
 	__u64 current_time = bpf_ktime_get_ns();
 
 	struct ethhdr *eth = (void *)(long)skb->data;
 
-	// Additional check after the adjustment
 	if ((void *)(eth + 1) > (void *)(long)skb->data_end)
 		return BPF_DROP;
+
+	bpf_printk(
+		"///////////// id = %llx, interface = %d, Packet received, source MAC: %02x:%02x:%02x:%02x:%02x:%02x\n",
+		current_time, skb->ingress_ifindex, eth->h_source[0], eth->h_source[1],
+		eth->h_source[2], eth->h_source[3], eth->h_source[4], eth->h_source[5]);
 
 	int ingress_ifindex = skb->ingress_ifindex;
 
