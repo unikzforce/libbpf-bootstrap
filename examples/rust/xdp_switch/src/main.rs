@@ -187,7 +187,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let unknown_unicast_flooding_open_skel_unsafe_send_for_attach_clone = Arc::clone(&unknown_unicast_flooding_open_skel_loaded_unsafe_send);
 
 
-    let result: Vec<(Link, TcHook)> = filtered_network_interfaces.iter().map(move |iface: &NetworkInterface| -> Result<(Link, TcHook), Box<dyn std::error::Error>> {
+    let result: Vec<(Link)> = filtered_network_interfaces.iter().map(move |iface: &NetworkInterface| -> Result<(Link), Box<dyn std::error::Error>> {
         let xdp_switch_skel_mut_ref: &mut UnsafeSend<XdpSwitchSkel> = unsafe {
             &mut *(Arc::as_ptr(&xdp_switch_open_skel_unsafe_send_for_attach_clone) as *mut _)
         };
@@ -203,17 +203,17 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         println!("trying to attach to network card {:?}", iface.name);
         let _xpd_switch_attachment_link = xdp_switch_skel_mut_ref.progs_mut().xdp_switch().attach_xdp(iface.index as i32)?;
 
-        tc_builder
-            .ifindex(iface.index as i32)
-            .replace(true)
-            .handle(1)
-            .priority(1);
-        let mut ingress = tc_builder.hook(TC_INGRESS);
-        let tc_hook = ingress.create()?;
+        // tc_builder
+        //     .ifindex(iface.index as i32)
+        //     .replace(true)
+        //     .handle(1)
+        //     .priority(1);
+        // let mut ingress = tc_builder.hook(TC_INGRESS);
+        // let tc_hook = ingress.create()?;
 
         println!("successful attachment to network card {:?}", iface.name);
-        Ok((_xpd_switch_attachment_link, tc_hook))
-    }).collect::<Result<Vec<(Link, TcHook)>, _>>()?;
+        Ok((_xpd_switch_attachment_link))
+    }).collect::<Result<Vec<(Link)>, _>>()?;
 
     for links_tuple in result {
         println!("link {:?}", links_tuple);
