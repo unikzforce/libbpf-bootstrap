@@ -9,7 +9,7 @@ __u32 interfaces[20] = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0
 __u32 number_of_interfaces = 20 - 1;
 
 SEC("tc")
-long unknown_unicast_flooding(struct __sk_buff *skb)
+int unknown_unicast_flooding(struct __sk_buff *skb)
 {
 
 	__u64 current_time = bpf_ktime_get_ns();
