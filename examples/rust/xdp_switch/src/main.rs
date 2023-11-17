@@ -2,7 +2,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 
 use std::sync::Arc;
 use std::mem;
-use std::os::fd::AsFd;
+use std::os::fd::{AsFd, AsRawFd};
 use std::thread;
 use std::time::Duration;
 use network_interface::NetworkInterface;
@@ -252,6 +252,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             println!("the Key is {:?}, the value is {:?}, the last registered time is {:?}", key.mac ,value.interface_index, value.timestamp)
         }
     }
+
+    let xdp_switch_open_skel_unsafe_send_for_map_cleanup_clone = Arc::clone(&xdp_switch_open_skel_unsafe_send);
+    let maps = xdp_switch_open_skel_unsafe_send_for_map_cleanup_clone.as_ref().maps();
+    let _fd_for_kernel_mac_table = maps.mac_table().as_fd();
 
     for mut tuple in xdp_tchook_link_tuples {
         tuple.1.destroy();
