@@ -255,7 +255,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let xdp_switch_open_skel_unsafe_send_for_map_cleanup_clone = Arc::clone(&xdp_switch_open_skel_unsafe_send);
     let maps = xdp_switch_open_skel_unsafe_send_for_map_cleanup_clone.as_ref().maps();
-    let _fd_for_kernel_mac_table = maps.mac_table().as_fd();
+    let fd_for_kernel_mac_table = maps.mac_table().as_fd().try_clone_to_owned()?;
 
     for mut tuple in xdp_tchook_link_tuples {
         tuple.1.destroy();
