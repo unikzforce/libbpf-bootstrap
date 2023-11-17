@@ -261,6 +261,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 }
 
 fn new_discovered_entry_handler(data: &[u8], user_mac_table: Cache<mac_address, iface_index>) -> std::os::raw::c_int {
+    println!("Receieved new_discovered_entry message");
     if data.len() != mem::size_of::<mac_address_iface_entry>() {
         eprintln!(
             "Invalid size {} != {}",
