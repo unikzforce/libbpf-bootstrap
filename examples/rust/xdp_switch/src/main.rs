@@ -188,7 +188,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 
 
-    let results: Vec<(Link, TcHook)> = filtered_network_interfaces.iter().map(move |iface: &NetworkInterface| -> Result<(Link, TcHook), Box<dyn std::error::Error>> {
+    let mut xdp_tchook_link_tuples: Vec<(Link, TcHook)> = filtered_network_interfaces.iter().map(move |iface: &NetworkInterface| -> Result<(Link, TcHook), Box<dyn std::error::Error>> {
         let xdp_switch_skel_mut_ref: &mut UnsafeSend<XdpSwitchSkel> = unsafe {
             &mut *(Arc::as_ptr(&xdp_switch_open_skel_unsafe_send_for_attach_clone) as *mut _)
         };
@@ -212,7 +212,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             .priority(1);
         let mut ingress = tc_builder.hook(TC_INGRESS);
         ingress.destroy();
-        
+
         let mut ingress = tc_builder.hook(TC_INGRESS);
         ingress.create()?;
         let tc_hook_attached = ingress.attach()?;
@@ -221,7 +221,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         Ok((_xpd_switch_attachment_link, tc_hook_attached))
     }).collect::<Result<Vec<(Link, TcHook)>, _>>()?;
 
-    let _results_arc: Arc<Vec<(Link, TcHook)>> = Arc::new(results);
+    // let _results_arc: Arc<Vec<(Link, TcHook)>> = Arc::new(xdp_tchook_link_tuples);
 
     let mut builder = libbpf_rs::RingBufferBuilder::new();
     let skel_for_new_discoveries_clone = Arc::clone(&xdp_switch_open_skel_unsafe_send);
@@ -251,6 +251,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             // println!("the Key is {}, the value is {}", key.clone().as_ref(), value)
             println!("the Key is {:?}, the value is {:?}, the last registered time is {:?}", key.mac ,value.interface_index, value.timestamp)
         }
+    }
+
+    for mut tuple in xdp_tchook_link_tuples {
+        tuple.1.destroy();
     }
 
     Ok(())
