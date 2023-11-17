@@ -6,7 +6,7 @@
 char LICENSE[] SEC("license") = "Dual BSD/GPL";
 
 __u32 interfaces[20] = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 };
-__u32 number_of_interfaces = 20 - 1;
+__u32 number_of_interfaces = 20;
 
 SEC("tc")
 int unknown_unicast_flooding(struct __sk_buff *skb)
@@ -32,7 +32,7 @@ int unknown_unicast_flooding(struct __sk_buff *skb)
 
 	int ingress_ifindex = skb->ingress_ifindex;
 
-	if (number_of_interfaces >= 19) {
+	if (number_of_interfaces >= 20) {
 		return BPF_DROP;
 	}
 

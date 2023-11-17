@@ -1,9 +1,8 @@
 use std::sync::atomic::{AtomicBool, Ordering};
 
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 use std::mem;
 use std::os::fd::AsFd;
-use std::rc::Rc;
 use std::thread;
 use std::time::Duration;
 use network_interface::NetworkInterface;
@@ -29,8 +28,7 @@ mod unknown_unicast_flooding;
 use xdp_switch::*;
 
 use chrono::Utc;
-use libbpf_rs::{Link, MapFlags, TC_CUSTOM, TC_EGRESS, TC_H_CLSACT, TC_H_MIN_INGRESS, TC_INGRESS, TcHook, TcHookBuilder};
-use libc::link;
+use libbpf_rs::{Link, MapFlags, TC_INGRESS, TcHook, TcHookBuilder};
 use moka::notification::RemovalCause;
 use unsafe_send_sync::UnsafeSend;
 use crate::unknown_unicast_flooding::{UnknownUnicastFloodingSkel, UnknownUnicastFloodingSkelBuilder};
@@ -201,6 +199,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
         for i in 0..filtered_network_interfaces_count {
             unknown_unicast_flooding_skel_mut_ref.bss().interfaces[i] = network_interface_indices[i];
+            unknown_unicast_flooding_skel_mut_ref.data().number_of_interfaces = filtered_network_interfaces_count as u32;
         }
 
         println!("trying to attach to network card {:?}", iface.name);
@@ -219,7 +218,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         Ok((_xpd_switch_attachment_link, tc_hook_attached))
     }).collect::<Result<Vec<(Link, TcHook)>, _>>()?;
 
-    let results_arc: Arc<Vec<(Link, TcHook)>> = Arc::new(results);
+    let _results_arc: Arc<Vec<(Link, TcHook)>> = Arc::new(results);
 
     let mut builder = libbpf_rs::RingBufferBuilder::new();
     let skel_for_new_discoveries_clone = Arc::clone(&xdp_switch_open_skel_unsafe_send);
