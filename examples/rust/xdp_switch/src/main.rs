@@ -211,6 +211,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             .handle(1)
             .priority(1);
         let mut ingress = tc_builder.hook(TC_INGRESS);
+        ingress.destroy();
+        
+        let mut ingress = tc_builder.hook(TC_INGRESS);
         ingress.create()?;
         let tc_hook_attached = ingress.attach()?;
 
