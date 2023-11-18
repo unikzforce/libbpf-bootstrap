@@ -30,7 +30,6 @@ use xdp_switch::*;
 use chrono::Utc;
 use libbpf_rs::{Link, MapFlags, TC_INGRESS, TcHook, TcHookBuilder};
 use moka::notification::RemovalCause;
-use nix::unistd::close;
 use unsafe_send_sync::UnsafeSend;
 use crate::unknown_unicast_flooding::{UnknownUnicastFloodingSkel, UnknownUnicastFloodingSkelBuilder};
 
@@ -254,15 +253,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
     }
 
-    let xdp_switch_open_skel_unsafe_send_for_map_cleanup_clone = Arc::clone(&xdp_switch_open_skel_unsafe_send);
-    let maps = xdp_switch_open_skel_unsafe_send_for_map_cleanup_clone.as_ref().maps();
-    let fd_for_kernel_mac_table = maps.mac_table().as_fd().as_raw_fd();
-
-    close(fd_for_kernel_mac_table)?;
-
     for mut tuple in xdp_tchook_link_tuples {
         tuple.1.destroy();
     }
+
+    std::fs::remove_file("/sys/fs/bpf/mac_table")?;
+    std::fs::remove_file("/sys/fs/bpf/new_discovered_entries_rb")?;
 
     Ok(())
 }
