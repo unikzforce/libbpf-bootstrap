@@ -117,12 +117,16 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let xdp_switch_open_skel_unsafe_send_for_eviction_clone = Arc::clone(&xdp_switch_open_skel_unsafe_send);
     let eviction_listener = move |k: Arc<mac_address>, v: iface_index, _: RemovalCause| {
+        println!("eviction_listener activated");
         let maps = xdp_switch_open_skel_unsafe_send_for_eviction_clone.as_ref().maps();
         let kernel_mac_table = maps.mac_table();
         let existing_kernel_entry = kernel_mac_table.lookup(&k.mac, MapFlags::ANY);
 
         match existing_kernel_entry {
             Ok(Some(data)) => {
+
+                println!("eviction_listener: an entry found in kernel_mac_table");
+
                 // The data is available, now we can try to convert it to iface_index struct
                 if data.len() == mem::size_of::<iface_index>() {
                     let iface_index_data = unsafe { &*(data.as_ptr() as *const iface_index) };
@@ -251,11 +255,18 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
     }
 
+    println!("starting to cleanup");
+
+
     for mut tuple in xdp_tchook_link_tuples {
+        println!("trying to destroy tc in interfaces");
         tuple.1.destroy();
     }
 
+    println!("trying to destroy remove mac_table map");
     std::fs::remove_file("/sys/fs/bpf/mac_table")?;
+
+    println!("trying to destroy remove new_discovered_entries_rb ring buffer");
     std::fs::remove_file("/sys/fs/bpf/new_discovered_entries_rb")?;
 
     Ok(())
