@@ -28,7 +28,7 @@ mod unknown_unicast_flooding;
 use xdp_switch::*;
 
 use chrono::Utc;
-use libbpf_rs::{Link, MapFlags, TC_INGRESS, TcHook, TcHookBuilder};
+use libbpf_rs::{Link, MapFlags, RingBuffer, TC_INGRESS, TcHook, TcHookBuilder};
 use moka::notification::RemovalCause;
 use unsafe_send_sync::UnsafeSend;
 use crate::unknown_unicast_flooding::{UnknownUnicastFloodingSkel, UnknownUnicastFloodingSkelBuilder};
@@ -221,31 +221,29 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         Ok((_xpd_switch_attachment_link, tc_hook_attached))
     }).collect::<Result<Vec<(Link, TcHook)>, _>>()?;
 
-    // let _results_arc: Arc<Vec<(Link, TcHook)>> = Arc::new(xdp_tchook_link_tuples);
-
-    let mut builder = libbpf_rs::RingBufferBuilder::new();
-    let skel_for_new_discoveries_clone = Arc::clone(&xdp_switch_open_skel_unsafe_send);
-
-    let maps = skel_for_new_discoveries_clone.as_ref().maps();
-
-    let user_mac_table_clone_2 = Arc::clone(&user_mac_table);
-    builder
-        .add(maps.new_discovered_entries_rb(), move |data| {
-            new_discovered_entry_handler(data, user_mac_table_clone_2.as_ref().clone().unwrap())
-        })
-        .unwrap();
-
-
-
     let running = Arc::new(AtomicBool::new(true));
     let r = running.clone();
     ctrlc::set_handler(move || {
         r.store(false, Ordering::SeqCst);
     })?;
 
+
+    let skel_for_new_discoveries_clone = Arc::clone(&xdp_switch_open_skel_unsafe_send);
+    let maps = skel_for_new_discoveries_clone.as_ref().maps();
+    let user_mac_table_clone_2 = Arc::clone(&user_mac_table);
+
+    let mut builder = libbpf_rs::RingBufferBuilder::new();
+    builder
+        .add(maps.new_discovered_entries_rb(), move |data| {
+            new_discovered_entry_handler(data, user_mac_table_clone_2.as_ref().clone().unwrap())
+        })?;
+
+    let mgr = builder.build()?;
+
+
     let user_mac_table_clone_3 = Arc::clone(&user_mac_table);
     while running.load(Ordering::SeqCst) {
-        thread::sleep(Duration::from_secs(5));
+        mgr.poll(Duration::from_secs(5))?;
         println!("Content of the user_mac_table");
         for (key, value) in user_mac_table_clone_3.as_ref().iter() {
             // println!("the Key is {}, the value is {}", key.clone().as_ref(), value)

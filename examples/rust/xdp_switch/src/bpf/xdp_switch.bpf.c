@@ -44,12 +44,7 @@ void register_source_mac_address_if_required(const struct xdp_md *ctx, const str
 			"id = %llx, learning-process: have NOT Found an already registered entry for source mac address \n",
 			current_time);
 
-		struct mac_address_iface_entry new_entry = {
-			.mac = { .mac = { 0xAA, 0xBB, 0xCC, 0xDD, 0xEE, 0xFF } },
-			.iface = { .interface_index = ctx->ingress_ifindex,
-				   .timestamp = current_time }
-		};
-
+		struct mac_address_iface_entry new_entry;
 		__builtin_memset(&new_entry, 0, sizeof(new_entry));
 
 		__builtin_memcpy(new_entry.mac.mac, eth->h_source, ETH_ALEN);
