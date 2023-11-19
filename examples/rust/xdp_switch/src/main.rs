@@ -159,7 +159,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let user_mac_table: Arc<UnsafeSend<Cache<MacAddress, IfaceIndex>>> = Arc::new(
         UnsafeSend::new(
             Cache::builder()
-                .eviction_listener(eviction_listener)
+                .eviction_listener(|key, value, cause| {
+                    println!("Evicted ({key:?},{value:?}) because {cause:?}")
+                })
                 .time_to_live(Duration::from_secs(30))
                 .build(),
         )
@@ -280,8 +282,6 @@ fn perform_cleanup(xdp_tchook_link_tuples: &mut Vec<(Link, TcHook)>) {
 
     println!("Trying to destroy remove new_discovered_entries_rb ring buffer");
     let _ = std::fs::remove_file("/sys/fs/bpf/new_discovered_entries_rb");
-
-    // Add other cleanup code here
 }
 
 fn new_discovered_entry_handler(data: &[u8], user_mac_table: Cache<MacAddress, IfaceIndex>) -> std::os::raw::c_int {
