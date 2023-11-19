@@ -156,19 +156,18 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
     };
 
-    let user_mac_table: Arc<UnsafeSend<Cache<MacAddress, IfaceIndex>>> = Arc::new(
-        UnsafeSend::new(
-            Cache::builder()
-                .max_capacity(1)
-                .time_to_live(Duration::from_secs(30))
-                .eviction_listener(|key, value, cause| {
-                    println!("Evicted ({key:?},{value:?}) because {cause:?}")
-                })
-                .build(),
-        )
+    let user_mac_table = Cache::builder()
+        .time_to_live(Duration::from_secs(30))
+        .eviction_listener(|key, value, cause| {
+            println!("Evicted ({key:?},{value:?}) because {cause:?}")
+        })
+        .build();
+
+    let user_mac_table_arc: Arc<UnsafeSend<Cache<MacAddress, IfaceIndex>>> = Arc::new(
+        UnsafeSend::new(user_mac_table)
     );
 
-    let user_mac_table_clone = Arc::clone(&user_mac_table);
+    let user_mac_table_clone = Arc::clone(&user_mac_table_arc);
     let _receiver_thread = thread::spawn(move || {
         while let Ok(item) = receiver.recv() {
             let _ = user_mac_table_clone.as_ref().insert(item.mac, item.iface);
@@ -246,7 +245,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let skel_for_new_discoveries_clone = Arc::clone(&xdp_switch_open_skel_unsafe_send);
     let maps = skel_for_new_discoveries_clone.as_ref().maps();
-    let user_mac_table_clone_2 = Arc::clone(&user_mac_table);
+    let user_mac_table_clone_2 = Arc::clone(&user_mac_table_arc);
 
     let mut builder = libbpf_rs::RingBufferBuilder::new();
     builder
@@ -257,7 +256,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mgr = builder.build()?;
 
 
-    let user_mac_table_clone_3 = Arc::clone(&user_mac_table);
+    let user_mac_table_clone_3 = Arc::clone(&user_mac_table_arc);
     while running.load(Ordering::SeqCst) {
         mgr.poll(Duration::from_secs(5))?;
         println!("Content of the user_mac_table");
