@@ -217,8 +217,14 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         let mut ingress = tc_builder.hook(TC_INGRESS);
         ingress.destroy();
 
+        println!("trying to delete previous tc on interface {:?}", iface.name);
+
         let mut ingress = tc_builder.hook(TC_INGRESS);
+
+        println!("trying to create tc on new interface {:?}", iface.name);
         ingress.create()?;
+
+        println!("trying to attach tc on new interface {:?}", iface.name);
         let tc_hook_attached = ingress.attach()?;
 
         println!("successful attachment to network card {:?}", iface.name);
