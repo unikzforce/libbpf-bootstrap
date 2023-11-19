@@ -159,6 +159,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let user_mac_table = Cache::builder()
         .time_to_live(Duration::from_secs(30))
         .eviction_listener(|key, value, cause| {
+            let file_path = "path/to/your/new_file.txt";
+            let _ = std::fs::File::create(file_path);
+
             println!("Evicted ({key:?},{value:?}) because {cause:?}")
         })
         .build();
