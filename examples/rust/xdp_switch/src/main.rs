@@ -97,6 +97,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     bump_memlock_rlimit()?;
 
+    std::fs::remove_file("/sys/fs/bpf/mac_table")?;
+    std::fs::remove_file("/sys/fs/bpf/new_discovered_entries_rb")?;
+
     let network_interfaces: Vec<NetworkInterface> = NetworkInterface::show()?;
 
     let filtered_network_interfaces: Vec<_> = if !cli.includes.is_empty() {
