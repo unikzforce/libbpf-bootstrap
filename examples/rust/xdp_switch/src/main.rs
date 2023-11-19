@@ -2,7 +2,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 
 use std::sync::Arc;
 use std::mem;
-use std::os::fd::{AsFd, AsRawFd};
+use std::os::fd::AsFd;
 use std::thread;
 use std::time::Duration;
 use network_interface::NetworkInterface;
@@ -12,8 +12,8 @@ use clap::Parser;
 use libbpf_rs::skel::OpenSkel;
 use libbpf_rs::skel::SkelBuilder;
 
-use anyhow::{bail, Result};
-use crossbeam_channel::{unbounded, Receiver, Sender};
+use anyhow::{Result};
+use crossbeam_channel::{Receiver, Sender, unbounded};
 
 extern crate nix;
 
@@ -24,11 +24,12 @@ mod xdp_switch;
 
 #[path = "bpf/.output/unknown_unicast_flooding.skel.rs"]
 mod unknown_unicast_flooding;
+mod memory_limit;
 
 use xdp_switch::*;
 
 use chrono::Utc;
-use libbpf_rs::{Link, MapFlags, RingBuffer, TC_INGRESS, TcHook, TcHookBuilder};
+use libbpf_rs::{Link, MapFlags, TC_INGRESS, TcHook, TcHookBuilder};
 use moka::notification::RemovalCause;
 use unsafe_send_sync::UnsafeSend;
 use crate::unknown_unicast_flooding::{UnknownUnicastFloodingSkel, UnknownUnicastFloodingSkelBuilder};
@@ -37,38 +38,33 @@ const ETH_ALEN: usize = 6;
 
 #[repr(C)]
 #[derive(Debug, Default, Hash, Eq, PartialEq, Ord, PartialOrd, Copy, Clone)]
-struct mac_address {
+struct MacAddress {
     mac: [u8; ETH_ALEN],
 }
 
 #[repr(C)]
 #[derive(Debug,  Clone)]
-struct iface_index {
+struct IfaceIndex {
     interface_index: u32,
     timestamp: u64,
 }
 
 #[repr(C)]
 #[derive(Debug, Clone)]
-struct mac_address_iface_entry {
-    mac: mac_address,
-    iface: iface_index,
+struct MacAddressIfaceEntry {
+    mac: MacAddress,
+    iface: IfaceIndex,
 }
 
+struct CleanupGuard<'a> {
+    xdp_tchook_link_tuples: &'a mut Vec<(Link, TcHook)>,
+}
 
-fn bump_memlock_rlimit() -> Result<()> {
-    let rlimit = libc::rlimit {
-        rlim_cur: 128 << 20,
-        rlim_max: 128 << 20,
-    };
-
-    if unsafe { libc::setrlimit(libc::RLIMIT_MEMLOCK, &rlimit) } != 0 {
-        bail!("Failed to increase rlimit");
+impl<'a> Drop for CleanupGuard<'a> {
+    fn drop(&mut self) {
+        perform_cleanup(self.xdp_tchook_link_tuples);
     }
-
-    Ok(())
 }
-
 
 #[derive(Parser)]
 #[command(author, version, about, long_about = None)]
@@ -83,7 +79,7 @@ struct Cli {
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let (sender, receiver): (Sender<mac_address_iface_entry>, Receiver<mac_address_iface_entry>) = unbounded();
+    let (sender, receiver): (Sender<MacAddressIfaceEntry>, Receiver<MacAddressIfaceEntry>) = unbounded();
 
     let cli = Cli::parse();
 
@@ -95,10 +91,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         println!("included item {}", item);
     });
 
-    bump_memlock_rlimit()?;
+    memory_limit::bump_memlock_rlimit()?;
 
     let _ = std::fs::remove_file("/sys/fs/bpf/mac_table");
-    let _ = std::fs::remove_file("/sys/fs/bpf/new_discovered_entries_rb");;
+    let _ = std::fs::remove_file("/sys/fs/bpf/new_discovered_entries_rb");
 
     let network_interfaces: Vec<NetworkInterface> = NetworkInterface::show()?;
 
@@ -119,7 +115,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let xdp_switch_open_skel_unsafe_send = Arc::new(UnsafeSend::new(xdp_switch_open_skel.load()?));
 
     let xdp_switch_open_skel_unsafe_send_for_eviction_clone = Arc::clone(&xdp_switch_open_skel_unsafe_send);
-    let eviction_listener = move |k: Arc<mac_address>, v: iface_index, _: RemovalCause| {
+    let eviction_listener = move |k: Arc<MacAddress>, v: IfaceIndex, _: RemovalCause| {
         println!("eviction_listener activated");
         let maps = xdp_switch_open_skel_unsafe_send_for_eviction_clone.as_ref().maps();
         let kernel_mac_table = maps.mac_table();
@@ -130,9 +126,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
                 println!("eviction_listener: an entry found in kernel_mac_table");
 
-                // The data is available, now we can try to convert it to iface_index struct
-                if data.len() == mem::size_of::<iface_index>() {
-                    let iface_index_data = unsafe { &*(data.as_ptr() as *const iface_index) };
+                // The data is available, now we can try to convert it to IfaceIndex struct
+                if data.len() == mem::size_of::<IfaceIndex>() {
+                    let iface_index_data = unsafe { &*(data.as_ptr() as *const IfaceIndex) };
 
                     let timestamp_seconds = iface_index_data.timestamp / 1_000_000_000; // Convert timestamp to seconds
 
@@ -140,7 +136,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                     let time_difference = current_time - timestamp_seconds as i64;
 
                     if time_difference < 30 {
-                        sender.send(mac_address_iface_entry {
+                        sender.send(MacAddressIfaceEntry {
                             mac: *k.clone().as_ref(),
                             iface: v.clone(),
                         }).expect("oeuoeu");
@@ -148,7 +144,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                         let _ = kernel_mac_table.delete(&k.mac);
                     }
                 } else {
-                    eprintln!("Invalid data size for iface_index");
+                    eprintln!("Invalid data size for IfaceIndex");
                 }
             }
             Ok(None) => {
@@ -160,7 +156,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
     };
 
-    let user_mac_table: Arc<UnsafeSend<Cache<mac_address, iface_index>>> = Arc::new(
+    let user_mac_table: Arc<UnsafeSend<Cache<MacAddress, IfaceIndex>>> = Arc::new(
         UnsafeSend::new(
             Cache::builder()
                 .eviction_listener(eviction_listener)
@@ -218,7 +214,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             .handle(1)
             .priority(1);
         let mut ingress = tc_builder.hook(TC_INGRESS);
-        ingress.destroy();
+        let _ = ingress.destroy();
 
         println!("trying to delete previous tc on interface {:?}", iface.name);
 
@@ -274,9 +270,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 fn perform_cleanup(xdp_tchook_link_tuples: &mut Vec<(Link, TcHook)>) {
     println!("Starting cleanup...");
 
-    for mut tuple in xdp_tchook_link_tuples.iter_mut() {
+    for tuple in xdp_tchook_link_tuples.iter_mut() {
         println!("Trying to destroy tc in interfaces");
-        tuple.1.destroy();
+        let _ = tuple.1.destroy();
     }
 
     println!("Trying to destroy remove mac_table map");
@@ -288,28 +284,18 @@ fn perform_cleanup(xdp_tchook_link_tuples: &mut Vec<(Link, TcHook)>) {
     // Add other cleanup code here
 }
 
-struct CleanupGuard<'a> {
-    xdp_tchook_link_tuples: &'a mut Vec<(Link, TcHook)>,
-}
-
-impl<'a> Drop for CleanupGuard<'a> {
-    fn drop(&mut self) {
-        perform_cleanup(self.xdp_tchook_link_tuples);
-    }
-}
-
-fn new_discovered_entry_handler(data: &[u8], user_mac_table: Cache<mac_address, iface_index>) -> std::os::raw::c_int {
+fn new_discovered_entry_handler(data: &[u8], user_mac_table: Cache<MacAddress, IfaceIndex>) -> std::os::raw::c_int {
     println!("Receieved new_discovered_entry message");
-    if data.len() != mem::size_of::<mac_address_iface_entry>() {
+    if data.len() != mem::size_of::<MacAddressIfaceEntry>() {
         eprintln!(
             "Invalid size {} != {}",
             data.len(),
-            mem::size_of::<mac_address_iface_entry>()
+            mem::size_of::<MacAddressIfaceEntry>()
         );
         return 1;
     }
 
-    let event = unsafe { &*(data.as_ptr() as *const mac_address_iface_entry) };
+    let event = unsafe { &*(data.as_ptr() as *const MacAddressIfaceEntry) };
 
 
     user_mac_table.insert(event.mac.clone(), event.iface.clone());

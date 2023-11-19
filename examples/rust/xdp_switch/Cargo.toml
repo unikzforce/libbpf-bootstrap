@@ -13,7 +13,8 @@ structopt = "0.3"
 libbpf-rs = "0.21.2"
 nix = "0.26.2"
 network-interface = "1.0.1"
-moka = "0.11.2"
+moka = { version = "0.12.1", features = ["sync", "future"] }
+rtnetlink = "0.13.1"
 blazesym = { path = "../../../blazesym", features = ["tracing"] }
 macaddr = "1.0.1"
 clap = { version = "4.3.19", features = ["derive"] }
