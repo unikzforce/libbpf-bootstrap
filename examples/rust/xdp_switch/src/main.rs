@@ -214,6 +214,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             .handle(1)
             .priority(1);
         let mut ingress = tc_builder.hook(TC_INGRESS);
+        let _ = ingress.detach();
         let _ = ingress.destroy();
 
         println!("trying to delete previous tc on interface {:?}", iface.name);
