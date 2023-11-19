@@ -97,14 +97,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     bump_memlock_rlimit()?;
 
-    match std::fs::remove_file("/sys/fs/bpf/mac_table") {
-        Ok(_) => {}
-        Err(_) => {}
-    };
-    match std::fs::remove_file("/sys/fs/bpf/new_discovered_entries_rb") {
-        Ok(_) => {}
-        Err(_) => {}
-    };
+    let _ = std::fs::remove_file("/sys/fs/bpf/mac_table");
+    let _ = std::fs::remove_file("/sys/fs/bpf/new_discovered_entries_rb");;
 
     let network_interfaces: Vec<NetworkInterface> = NetworkInterface::show()?;
 
