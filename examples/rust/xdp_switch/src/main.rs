@@ -262,6 +262,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let user_mac_table_clone_3 = Arc::clone(&user_mac_table_arc);
     while running.load(Ordering::SeqCst) {
         mgr.poll(Duration::from_secs(5))?;
+        user_mac_table_clone_3.as_ref().i.run_pending_tasks();
         println!("Content of the user_mac_table, {:?}", user_mac_table_clone_3.as_ref().i.entry_count());
         for (key, value) in user_mac_table_clone_3.as_ref().iter() {
             // println!("the Key is {}, the value is {}", key.clone().as_ref(), value)
