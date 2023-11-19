@@ -159,10 +159,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let user_mac_table: Arc<UnsafeSend<Cache<MacAddress, IfaceIndex>>> = Arc::new(
         UnsafeSend::new(
             Cache::builder()
+                .time_to_live(Duration::from_secs(30))
                 .eviction_listener(|key, value, cause| {
                     println!("Evicted ({key:?},{value:?}) because {cause:?}")
                 })
-                .time_to_live(Duration::from_secs(30))
                 .build(),
         )
     );
