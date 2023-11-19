@@ -240,6 +240,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         r.store(false, Ordering::SeqCst);
     })?;
 
+    let _cleanup_guard = CleanupGuard {
+        xdp_tchook_link_tuples: &mut xdp_tchook_link_tuples,
+    };
+
 
     let skel_for_new_discoveries_clone = Arc::clone(&xdp_switch_open_skel_unsafe_send);
     let maps = skel_for_new_discoveries_clone.as_ref().maps();
@@ -264,21 +268,34 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
     }
 
-    println!("starting to cleanup");
+    Ok(())
+}
 
+fn perform_cleanup(xdp_tchook_link_tuples: &mut Vec<(Link, TcHook)>) {
+    println!("Starting cleanup...");
 
-    for mut tuple in xdp_tchook_link_tuples {
-        println!("trying to destroy tc in interfaces");
+    for mut tuple in xdp_tchook_link_tuples.iter_mut() {
+        println!("Trying to destroy tc in interfaces");
         tuple.1.destroy();
     }
 
-    println!("trying to destroy remove mac_table map");
-    std::fs::remove_file("/sys/fs/bpf/mac_table")?;
+    println!("Trying to destroy remove mac_table map");
+    let _ = std::fs::remove_file("/sys/fs/bpf/mac_table");
 
-    println!("trying to destroy remove new_discovered_entries_rb ring buffer");
-    std::fs::remove_file("/sys/fs/bpf/new_discovered_entries_rb")?;
+    println!("Trying to destroy remove new_discovered_entries_rb ring buffer");
+    let _ = std::fs::remove_file("/sys/fs/bpf/new_discovered_entries_rb");
 
-    Ok(())
+    // Add other cleanup code here
+}
+
+struct CleanupGuard<'a> {
+    xdp_tchook_link_tuples: &'a mut Vec<(Link, TcHook)>,
+}
+
+impl<'a> Drop for CleanupGuard<'a> {
+    fn drop(&mut self) {
+        perform_cleanup(self.xdp_tchook_link_tuples);
+    }
 }
 
 fn new_discovered_entry_handler(data: &[u8], user_mac_table: Cache<mac_address, iface_index>) -> std::os::raw::c_int {
