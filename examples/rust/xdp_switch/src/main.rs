@@ -7,7 +7,7 @@ use std::thread;
 use std::time::Duration;
 use network_interface::NetworkInterface;
 use network_interface::NetworkInterfaceConfig;
-use moka::future::Cache;
+use moka::sync::Cache;
 use clap::Parser;
 use libbpf_rs::skel::OpenSkel;
 use libbpf_rs::skel::SkelBuilder;
@@ -260,14 +260,21 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 
     let user_mac_table_clone_3 = Arc::clone(&user_mac_table_arc);
+    let mut i = 0;
     while running.load(Ordering::SeqCst) {
-        mgr.poll(Duration::from_secs(5))?;
+        mgr.poll(Duration::from_millis(50))?;
         // user_mac_table_clone_3.as_ref().i.run_pending_tasks();
-        println!("Content of the user_mac_table, {:?}", user_mac_table_clone_3.as_ref().i.entry_count());
-        for (key, value) in user_mac_table_clone_3.as_ref().iter() {
-            // println!("the Key is {}, the value is {}", key.clone().as_ref(), value)
-            println!("the Key is {:?}, the value is {:?}, the last registered time is {:?}", key.mac ,value.interface_index, value.timestamp)
+        if i >= 100 {
+            println!("Content of the user_mac_table, {:?}", user_mac_table_clone_3.as_ref().i.entry_count());
+            for (key, value) in user_mac_table_clone_3.as_ref().iter() {
+                // println!("the Key is {}, the value is {}", key.clone().as_ref(), value)
+                println!("the Key is {:?}, the value is {:?}, the last registered time is {:?}", key.mac, value.interface_index, value.timestamp)
+            }
+            i = 0;
+        } else {
+            i += 1;
         }
+
     }
 
     Ok(())
