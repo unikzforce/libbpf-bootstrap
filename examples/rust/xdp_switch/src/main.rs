@@ -43,7 +43,7 @@ struct MacAddress {
 }
 
 #[repr(C)]
-#[derive(Debug,  Clone)]
+#[derive(Debug, Clone)]
 struct IfaceIndex {
     interface_index: u32,
     timestamp: u64,
@@ -83,11 +83,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let cli = Cli::parse();
 
-    cli.excludes.iter().for_each( | item | {
+    cli.excludes.iter().for_each(|item| {
         println!("excluded item {}", item);
     });
 
-    cli.includes.iter().for_each( | item | {
+    cli.includes.iter().for_each(|item| {
         println!("included item {}", item);
     });
 
@@ -111,19 +111,23 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     };
 
     let xdp_switch_skel_builder = XdpSwitchSkelBuilder::default();
-    let xdp_switch_open_skel = xdp_switch_skel_builder.open()?;
-    let xdp_switch_open_skel_unsafe_send = Arc::new(UnsafeSend::new(xdp_switch_open_skel.load()?));
+    let xdp_switch_loaded_skel = Arc::new(
+        UnsafeSend::new(
+            xdp_switch_skel_builder
+                .open()?
+                .load()?
+        ));
 
-    let xdp_switch_open_skel_unsafe_send_for_eviction_clone = Arc::clone(&xdp_switch_open_skel_unsafe_send);
+    let xdp_switch_loaded_skel_for_eviction_listener = xdp_switch_loaded_skel.clone();
+
     let eviction_listener = move |k: Arc<MacAddress>, v: IfaceIndex, _: RemovalCause| {
         println!("eviction_listener activated");
-        let maps = xdp_switch_open_skel_unsafe_send_for_eviction_clone.as_ref().maps();
+        let maps = xdp_switch_loaded_skel_for_eviction_listener.as_ref().maps();
         let kernel_mac_table = maps.mac_table();
         let existing_kernel_entry = kernel_mac_table.lookup(&k.mac, MapFlags::ANY);
 
         match existing_kernel_entry {
             Ok(Some(data)) => {
-
                 println!("eviction_listener: an entry found in kernel_mac_table");
 
                 // The data is available, now we can try to convert it to IfaceIndex struct
@@ -157,19 +161,17 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
     };
 
-    let user_mac_table = Cache::builder()
-        .time_to_live(Duration::from_secs(30))
-        .eviction_listener(eviction_listener)
-        .build();
-
-    let user_mac_table_arc: Arc<UnsafeSend<Cache<MacAddress, IfaceIndex>>> = Arc::new(
-        UnsafeSend::new(user_mac_table)
+    let user_mac_table: Arc<UnsafeSend<Cache<MacAddress, IfaceIndex>>> = Arc::new(
+        UnsafeSend::new(Cache::builder()
+            .time_to_live(Duration::from_secs(30))
+            .eviction_listener(eviction_listener)
+            .build())
     );
 
-    let user_mac_table_clone = Arc::clone(&user_mac_table_arc);
+    let user_mac_table_for_re_addition = user_mac_table.clone();
     let _receiver_thread = thread::spawn(move || {
         while let Ok(item) = receiver.recv() {
-            let _ = user_mac_table_clone.as_ref().insert(item.mac, item.iface);
+            let _ = user_mac_table_for_re_addition.as_ref().insert(item.mac, item.iface);
             println!("END: again putting the damn item into the map");
         }
     });
@@ -180,26 +182,28 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .collect();
     let filtered_network_interfaces_count = filtered_network_interfaces.len();
 
-    let unknown_unicast_flooding_skel_builder = UnknownUnicastFloodingSkelBuilder::default();
-    let unknown_unicast_flooding_open_skel = unknown_unicast_flooding_skel_builder.open()?;
-    let unknown_unicast_flooding_open_skel_loaded_unsafe_send = Arc::new(UnsafeSend::new(unknown_unicast_flooding_open_skel.load()?));
+    let unknown_unicast_flooding_loaded_skel = Arc::new(
+        UnsafeSend::new(
+            UnknownUnicastFloodingSkelBuilder::default()
+                .open()?
+                .load()?
+        ));
 
-    let unknown_unicast_flooding_open_skel_unsafe_send_for_tc_hook_builder = Arc::clone(&unknown_unicast_flooding_open_skel_loaded_unsafe_send);
-    let unknown_unicast_flooding_prog = unknown_unicast_flooding_open_skel_unsafe_send_for_tc_hook_builder.as_ref().progs();
+    let unknown_unicast_flooding_loaded_skel_for_tc_hook = unknown_unicast_flooding_loaded_skel.clone();
+    let unknown_unicast_flooding_prog = unknown_unicast_flooding_loaded_skel_for_tc_hook.as_ref().progs();
     let mut tc_builder = TcHookBuilder::new(unknown_unicast_flooding_prog.unknown_unicast_flooding().as_fd());
 
-    let xdp_switch_open_skel_unsafe_send_for_attach_clone = Arc::clone(&xdp_switch_open_skel_unsafe_send);
-    let unknown_unicast_flooding_open_skel_unsafe_send_for_attach_clone = Arc::clone(&unknown_unicast_flooding_open_skel_loaded_unsafe_send);
-
+    let xdp_switch_loaded_skel_for_attach = xdp_switch_loaded_skel.clone();
+    let unknown_unicast_flooding_loaded_skel_for_attach = unknown_unicast_flooding_loaded_skel.clone();
 
 
     let mut xdp_tchook_link_tuples: Vec<(Link, TcHook)> = filtered_network_interfaces.iter().map(move |iface: &NetworkInterface| -> Result<(Link, TcHook), Box<dyn std::error::Error>> {
         let xdp_switch_skel_mut_ref: &mut UnsafeSend<XdpSwitchSkel> = unsafe {
-            &mut *(Arc::as_ptr(&xdp_switch_open_skel_unsafe_send_for_attach_clone) as *mut _)
+            &mut *(Arc::as_ptr(&xdp_switch_loaded_skel_for_attach) as *mut _)
         };
 
         let unknown_unicast_flooding_skel_mut_ref: &mut UnsafeSend<UnknownUnicastFloodingSkel> = unsafe {
-            &mut *(Arc::as_ptr(&unknown_unicast_flooding_open_skel_unsafe_send_for_attach_clone) as *mut _)
+            &mut *(Arc::as_ptr(&unknown_unicast_flooding_loaded_skel_for_attach) as *mut _)
         };
 
         for i in 0..filtered_network_interfaces_count {
@@ -243,34 +247,33 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     };
 
 
-    let skel_for_new_discoveries_clone = Arc::clone(&xdp_switch_open_skel_unsafe_send);
-    let maps = skel_for_new_discoveries_clone.as_ref().maps();
-    let user_mac_table_clone_2 = Arc::clone(&user_mac_table_arc);
+    let xdp_switch_loaded_skel_for_new_discovery = xdp_switch_loaded_skel.clone();
+    let maps = xdp_switch_loaded_skel_for_new_discovery.as_ref().maps();
+    let user_mac_table_for_handling_new_discovery = user_mac_table.clone();
 
     let mut builder = libbpf_rs::RingBufferBuilder::new();
     builder
         .add(maps.new_discovered_entries_rb(), move |data| {
-            new_discovered_entry_handler(data, user_mac_table_clone_2.as_ref().clone().unwrap())
+            new_discovered_entry_handler(data, user_mac_table_for_handling_new_discovery.as_ref().clone().unwrap())
         })?;
 
     let mgr = builder.build()?;
 
 
-    let user_mac_table_clone_3 = Arc::clone(&user_mac_table_arc);
+    let user_mac_table_for_execution_of_pending_tasks = user_mac_table.clone();
     let mut i = 0;
     while running.load(Ordering::SeqCst) {
         mgr.poll(Duration::from_millis(50))?;
-        user_mac_table_clone_3.as_ref().i.run_pending_tasks();
+        user_mac_table_for_execution_of_pending_tasks.as_ref().i.run_pending_tasks();
         if i >= 100 {
-            println!("Content of the user_mac_table, {:?}", user_mac_table_clone_3.as_ref().i.entry_count());
-            for (key, value) in user_mac_table_clone_3.as_ref().iter() {
+            println!("Content of the user_mac_table, {:?}", user_mac_table_for_execution_of_pending_tasks.as_ref().i.entry_count());
+            for (key, value) in user_mac_table_for_execution_of_pending_tasks.as_ref().iter() {
                 println!("the Key is {:?}, the value is {:?}, the last registered time is {:?}", key.mac, value.interface_index, value.timestamp)
             }
             i = 0;
         } else {
             i += 1;
         }
-
     }
 
     Ok(())
