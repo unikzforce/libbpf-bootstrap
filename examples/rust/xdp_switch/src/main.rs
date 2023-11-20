@@ -147,6 +147,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                         println!("START: again putting the damn item into the map");
                     } else {
                         let _ = kernel_mac_table.delete(&k.mac);
+                        println!("deleted item from kernel mac_table");
                     }
                 } else {
                     eprintln!("Invalid data size for IfaceIndex");
@@ -250,7 +251,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let xdp_switch_loaded_skel_for_new_discovery = xdp_switch_loaded_skel.clone();
     let maps = xdp_switch_loaded_skel_for_new_discovery.as_ref().maps();
     let user_mac_table_for_handling_new_discovery = user_mac_table.clone();
-    
+
     let mut new_discovered_ring_buffer_builder = libbpf_rs::RingBufferBuilder::new();
     new_discovered_ring_buffer_builder
         .add(maps.new_discovered_entries_rb(), move |data| {
