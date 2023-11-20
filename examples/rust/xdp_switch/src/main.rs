@@ -263,7 +263,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut i = 0;
     while running.load(Ordering::SeqCst) {
         mgr.poll(Duration::from_millis(50))?;
-        // user_mac_table_clone_3.as_ref().i.run_pending_tasks();
+        user_mac_table_clone_3.as_ref().i.run_pending_tasks();
         if i >= 100 {
             println!("Content of the user_mac_table, {:?}", user_mac_table_clone_3.as_ref().i.entry_count());
             for (key, value) in user_mac_table_clone_3.as_ref().iter() {
