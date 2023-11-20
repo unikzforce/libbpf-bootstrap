@@ -140,6 +140,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                             mac: *k.clone().as_ref(),
                             iface: v.clone(),
                         }).expect("oeuoeu");
+                        println!("START: again putting the damn item into the map");
                     } else {
                         let _ = kernel_mac_table.delete(&k.mac);
                     }
@@ -168,8 +169,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let user_mac_table_clone = Arc::clone(&user_mac_table_arc);
     let _receiver_thread = thread::spawn(move || {
         while let Ok(item) = receiver.recv() {
-            println!("again putting the damn item into the map");
             let _ = user_mac_table_clone.as_ref().insert(item.mac, item.iface);
+            println!("END: again putting the damn item into the map");
         }
     });
 
