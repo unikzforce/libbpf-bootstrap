@@ -251,19 +251,19 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let maps = xdp_switch_loaded_skel_for_new_discovery.as_ref().maps();
     let user_mac_table_for_handling_new_discovery = user_mac_table.clone();
 
-    let mut builder = libbpf_rs::RingBufferBuilder::new();
-    builder
+    let mut new_discovered_ring_buffer_builder = libbpf_rs::RingBufferBuilder::new();
+    new_discovered_ring_buffer_builder
         .add(maps.new_discovered_entries_rb(), move |data| {
             new_discovered_entry_handler(data, user_mac_table_for_handling_new_discovery.as_ref().clone().unwrap())
         })?;
 
-    let mgr = builder.build()?;
+    let new_discovered_entries_mgr = new_discovered_ring_buffer_builder.build()?;
 
 
     let user_mac_table_for_execution_of_pending_tasks = user_mac_table.clone();
     let mut i = 0;
     while running.load(Ordering::SeqCst) {
-        mgr.poll(Duration::from_millis(50))?;
+        new_discovered_entries_mgr.poll(Duration::from_millis(50))?;
         user_mac_table_for_execution_of_pending_tasks.as_ref().i.run_pending_tasks();
         if i >= 100 {
             println!("Content of the user_mac_table, {:?}", user_mac_table_for_execution_of_pending_tasks.as_ref().i.entry_count());
