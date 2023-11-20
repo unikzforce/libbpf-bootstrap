@@ -158,12 +158,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let user_mac_table = Cache::builder()
         .time_to_live(Duration::from_secs(30))
-        .eviction_listener(|key, value, cause| {
-            let file_path = "~/fuck.txt";
-            let _ = std::fs::File::create(file_path);
-
-            println!("Evicted ({key:?},{value:?}) because {cause:?}")
-        })
+        .eviction_listener(eviction_listener)
         .build();
 
     let user_mac_table_arc: Arc<UnsafeSend<Cache<MacAddress, IfaceIndex>>> = Arc::new(
@@ -267,7 +262,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         if i >= 100 {
             println!("Content of the user_mac_table, {:?}", user_mac_table_clone_3.as_ref().i.entry_count());
             for (key, value) in user_mac_table_clone_3.as_ref().iter() {
-                // println!("the Key is {}, the value is {}", key.clone().as_ref(), value)
                 println!("the Key is {:?}, the value is {:?}, the last registered time is {:?}", key.mac, value.interface_index, value.timestamp)
             }
             i = 0;
