@@ -250,7 +250,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let xdp_switch_loaded_skel_for_new_discovery = xdp_switch_loaded_skel.clone();
     let maps = xdp_switch_loaded_skel_for_new_discovery.as_ref().maps();
     let user_mac_table_for_handling_new_discovery = user_mac_table.clone();
-
+    
     let mut new_discovered_ring_buffer_builder = libbpf_rs::RingBufferBuilder::new();
     new_discovered_ring_buffer_builder
         .add(maps.new_discovered_entries_rb(), move |data| {
@@ -258,21 +258,24 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         })?;
 
     let new_discovered_entries_mgr = new_discovered_ring_buffer_builder.build()?;
-
-
     let user_mac_table_for_execution_of_pending_tasks = user_mac_table.clone();
-    let mut i = 0;
-    while running.load(Ordering::SeqCst) {
-        new_discovered_entries_mgr.poll(Duration::from_millis(50))?;
-        user_mac_table_for_execution_of_pending_tasks.as_ref().i.run_pending_tasks();
-        if i >= 100 {
-            println!("Content of the user_mac_table, {:?}", user_mac_table_for_execution_of_pending_tasks.as_ref().i.entry_count());
-            for (key, value) in user_mac_table_for_execution_of_pending_tasks.as_ref().iter() {
-                println!("the Key is {:?}, the value is {:?}, the last registered time is {:?}", key.mac, value.interface_index, value.timestamp)
+    thread::spawn(move || {
+        loop {
+            match new_discovered_entries_mgr.poll(Duration::from_millis(50)) {
+                Ok(_) => {}
+                Err(e) => eprintln!("Error polling new discovered entries: {:?}", e)
             }
-            i = 0;
-        } else {
-            i += 1;
+            user_mac_table_for_execution_of_pending_tasks.as_ref().i.run_pending_tasks();
+        }
+    });
+
+
+    let user_mac_table_for_printing = user_mac_table.clone();
+    while running.load(Ordering::SeqCst) {
+        thread::sleep(Duration::from_secs(5));
+        println!("Content of the user_mac_table, {:?}", user_mac_table_for_printing.as_ref().i.entry_count());
+        for (key, value) in user_mac_table_for_printing.as_ref().iter() {
+            println!("the Key is {:?}, the value is {:?}, the last registered time is {:?}", key.mac, value.interface_index, value.timestamp)
         }
     }
 
