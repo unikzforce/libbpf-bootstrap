@@ -135,17 +135,20 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
                         // The data is available, now we can try to convert it to IfaceIndex struct
                         if data.len() == mem::size_of::<IfaceIndex>() {
-                            let iface_index_data = unsafe { &*(data.as_ptr() as *const IfaceIndex) };
+                            let iface_index_data_in_kernel = unsafe { &*(data.as_ptr() as *const IfaceIndex) };
 
-                            let timestamp_seconds = iface_index_data.timestamp / 1_000_000_000; // Convert timestamp to seconds
+                            let timestamp_seconds_in_kernel = iface_index_data_in_kernel.timestamp / 1_000_000_000; // Convert timestamp to seconds
 
                             let current_time = Utc::now().timestamp() / 1_000_000_000;
-                            let time_difference = current_time - timestamp_seconds as i64;
+                            let time_difference = current_time - timestamp_seconds_in_kernel as i64;
 
                             if time_difference < 30 {
                                 sender.send(MacAddressIfaceEntry {
                                     mac: *k.clone().as_ref(),
-                                    iface: v.clone(),
+                                    iface: IfaceIndex {
+                                        interface_index: v.interface_index,
+                                        timestamp: iface_index_data_in_kernel.timestamp,
+                                    },
                                 }).expect("oeuoeu");
                                 println!("START: again putting the damn item into the map");
                             } else {
