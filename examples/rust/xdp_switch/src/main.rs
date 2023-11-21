@@ -139,7 +139,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
                             let timestamp_seconds = iface_index_data.timestamp / 1_000_000_000; // Convert timestamp to seconds
 
-                            let current_time = Utc::now().timestamp();
+                            let current_time = Utc::now().timestamp() / 1_000_000_000;
                             let time_difference = current_time - timestamp_seconds as i64;
 
                             if time_difference < 30 {
