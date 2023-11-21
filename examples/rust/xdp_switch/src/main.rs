@@ -120,52 +120,50 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let xdp_switch_loaded_skel_for_eviction_listener = xdp_switch_loaded_skel.clone();
 
-    let eviction_listener = move |k: Arc<MacAddress>, v: IfaceIndex, _: RemovalCause| {
-        println!("eviction_listener activated");
-        let maps = xdp_switch_loaded_skel_for_eviction_listener.as_ref().maps();
-        let kernel_mac_table = maps.mac_table();
-        let existing_kernel_entry = kernel_mac_table.lookup(&k.mac, MapFlags::ANY);
-
-        match existing_kernel_entry {
-            Ok(Some(data)) => {
-                println!("eviction_listener: an entry found in kernel_mac_table");
-
-                // The data is available, now we can try to convert it to IfaceIndex struct
-                if data.len() == mem::size_of::<IfaceIndex>() {
-                    let iface_index_data = unsafe { &*(data.as_ptr() as *const IfaceIndex) };
-
-                    let timestamp_seconds = iface_index_data.timestamp / 1_000_000_000; // Convert timestamp to seconds
-
-                    let current_time = Utc::now().timestamp();
-                    let time_difference = current_time - timestamp_seconds as i64;
-
-                    if time_difference < 30 {
-                        sender.send(MacAddressIfaceEntry {
-                            mac: *k.clone().as_ref(),
-                            iface: v.clone(),
-                        }).expect("oeuoeu");
-                        println!("START: again putting the damn item into the map");
-                    } else {
-                        let _ = kernel_mac_table.delete(&k.mac);
-                        println!("deleted item from kernel mac_table");
-                    }
-                } else {
-                    eprintln!("Invalid data size for IfaceIndex");
-                }
-            }
-            Ok(None) => {
-                println!("No entry found for the given MAC address");
-            }
-            Err(err) => {
-                eprintln!("Error while looking up the MAC address: {:?}", err);
-            }
-        }
-    };
-
     let user_mac_table: Arc<UnsafeSend<Cache<MacAddress, IfaceIndex>>> = Arc::new(
         UnsafeSend::new(Cache::builder()
             .time_to_live(Duration::from_secs(30))
-            .eviction_listener(eviction_listener)
+            .eviction_listener(move |k: Arc<MacAddress>, v: IfaceIndex, _: RemovalCause| {
+                println!("eviction_listener activated");
+                let maps = xdp_switch_loaded_skel_for_eviction_listener.as_ref().maps();
+                let kernel_mac_table = maps.mac_table();
+                let existing_kernel_entry = kernel_mac_table.lookup(&k.mac, MapFlags::ANY);
+
+                match existing_kernel_entry {
+                    Ok(Some(data)) => {
+                        println!("eviction_listener: an entry found in kernel_mac_table");
+
+                        // The data is available, now we can try to convert it to IfaceIndex struct
+                        if data.len() == mem::size_of::<IfaceIndex>() {
+                            let iface_index_data = unsafe { &*(data.as_ptr() as *const IfaceIndex) };
+
+                            let timestamp_seconds = iface_index_data.timestamp / 1_000_000_000; // Convert timestamp to seconds
+
+                            let current_time = Utc::now().timestamp();
+                            let time_difference = current_time - timestamp_seconds as i64;
+
+                            if time_difference < 30 {
+                                sender.send(MacAddressIfaceEntry {
+                                    mac: *k.clone().as_ref(),
+                                    iface: v.clone(),
+                                }).expect("oeuoeu");
+                                println!("START: again putting the damn item into the map");
+                            } else {
+                                let _ = kernel_mac_table.delete(&k.mac);
+                                println!("deleted item from kernel mac_table");
+                            }
+                        } else {
+                            eprintln!("Invalid data size for IfaceIndex");
+                        }
+                    }
+                    Ok(None) => {
+                        println!("No entry found for the given MAC address");
+                    }
+                    Err(err) => {
+                        eprintln!("Error while looking up the MAC address: {:?}", err);
+                    }
+                }
+            })
             .build())
     );
 
