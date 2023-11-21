@@ -271,7 +271,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let user_mac_table_for_printing = user_mac_table.clone();
     while running.load(Ordering::SeqCst) {
-        thread::sleep(Duration::from_secs(5));
+        thread::sleep(Duration::from_secs(1));
         println!("Content of the user_mac_table, {:?}", user_mac_table_for_printing.as_ref().i.entry_count());
         for (key, value) in user_mac_table_for_printing.as_ref().iter() {
             println!("the Key is {:?}, the value is {:?}, the last registered time is {:?}", key.mac, value.interface_index, value.timestamp)
