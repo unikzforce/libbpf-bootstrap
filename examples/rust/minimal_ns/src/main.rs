@@ -42,7 +42,7 @@ fn main() -> Result<()> {
     let mut open_skel = skel_builder.open()?;
     open_skel.bss().dev = stat_result.st_dev;
     open_skel.bss().ino = stat_result.st_ino;
-    open_skel.bss().my_pid = Pid::this().as_raw() as u32;
+    open_skel.bss().my_pid = Pid::this().as_raw() as i32;
 
     let mut skel = open_skel.load()?;
 
