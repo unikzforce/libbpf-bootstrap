@@ -52,9 +52,9 @@ RUN cmake ../examples/c
 
 RUN make
 
-WORKDIR /sources/libbpf-bootstrap/examples/rust
+WORKDIR /sources/libbpf-bootstrap/examples/rust/xdp_switch
 
-RUN RUST_BACKTRACE=1 cargo build
+RUN cargo build --release
 
 # Set the default command
 CMD ["tail", "-f", "/dev/null"]
